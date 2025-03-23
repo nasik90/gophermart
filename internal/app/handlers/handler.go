@@ -146,7 +146,7 @@ func (h *Handler) GetOrderList() http.HandlerFunc {
 			}
 			resStatus = http.StatusOK
 		}
-		res.Header().Set("content-type", "json/application")
+		res.Header().Set("content-type", "application/json")
 		res.WriteHeader(resStatus)
 		res.Write(orderListJson)
 	}

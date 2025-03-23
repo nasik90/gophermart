@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/nasik90/gophermart/internal/app/storage"
+	"github.com/phedde/luhn-algorithm"
 )
 
 type Repository interface {
@@ -36,10 +37,10 @@ func (s *Service) UserIsValid(ctx context.Context, login, password string) (bool
 }
 
 func (s *Service) LoadOrder(ctx context.Context, orderNumber int, login string) error {
-	// isValid := luhn.IsValid(orderNumber)
-	// if !isValid {
-	// 	return ErrOrderFormat
-	// }
+	isValid := luhn.IsValid(int64(orderNumber))
+	if !isValid {
+		return ErrOrderFormat
+	}
 	return s.repo.SaveNewOrder(ctx, orderNumber, login)
 }
 
@@ -48,9 +49,9 @@ func (s *Service) GetOrderList(ctx context.Context, login string) (*[]storage.Or
 }
 
 func (s *Service) WithdrawPoints(ctx context.Context, login string, orderId int, points float32) error {
-	// isValid := luhn.IsValid(orderNumber)
-	// if !isValid {
-	// 	return ErrOrderFormat
-	// }
+	isValid := luhn.IsValid(int64(orderId))
+	if !isValid {
+		return ErrOrderFormat
+	}
 	return s.repo.WithdrawPoints(ctx, login, orderId, points)
 }
