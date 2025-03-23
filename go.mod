@@ -1,6 +1,6 @@
 module github.com/nasik90/gophermart
 
-go 1.24.1
+go 1.23.7
 
 require (
 	github.com/go-chi/chi v1.5.5 // indirect
