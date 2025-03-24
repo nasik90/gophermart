@@ -2,6 +2,12 @@ package main
 
 import (
 	"database/sql"
+	"errors"
+	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/nasik90/gophermart/cmd/gophermart/settings"
@@ -32,6 +38,33 @@ func main() {
 	s := service.NewService(repo)
 	h := handler.NewHandler(s)
 	go s.HandleOrderQueue(options.ServerAddress)
-	serv := server.NewServer(h, options.ServerAddress)
-	serv.RunServer()
+
+	server := server.NewServer(h, options.ServerAddress)
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-sigs
+		logger.Log.Info("closing the server")
+		if err := server.StopServer(); err != nil {
+			logger.Log.Error("stop http server", zap.String("error", err.Error()))
+		}
+		logger.Log.Info("closing the storage")
+		if err := repo.Close(); err != nil {
+			logger.Log.Error("close storage", zap.String("error", err.Error()))
+		}
+		logger.Log.Info("ready to exit")
+	}()
+
+	err = server.RunServer()
+	if err != nil {
+		if !errors.Is(err, http.ErrServerClosed) {
+			logger.Log.Fatal("run server", zap.String("error", err.Error()))
+		}
+	}
+
+	wg.Wait()
+	logger.Log.Info("closed gracefuly")
 }
