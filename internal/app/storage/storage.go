@@ -7,7 +7,7 @@ import (
 
 var (
 	ErrUserNotUnique            = errors.New("user is not unique")
-	ErrOrderIdNotUnique         = errors.New("order id is not unique")
+	ErrOrderIDNotUnique         = errors.New("order id is not unique")
 	ErrOrderLoadedByAnotherUser = errors.New("order loaded by another user")
 	ErrOutOfBalance             = errors.New("out of balance")
 )

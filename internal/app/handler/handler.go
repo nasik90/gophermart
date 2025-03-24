@@ -17,7 +17,7 @@ type Service interface {
 	UserIsValid(ctx context.Context, login, password string) (bool, error)
 	LoadOrder(ctx context.Context, orderNumber int, login string) error
 	GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error)
-	WithdrawPoints(ctx context.Context, login string, orderId int, points float32) error
+	WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error
 }
 
 type Handler struct {
@@ -115,7 +115,7 @@ func (h *Handler) LoadOrder() http.HandlerFunc {
 			} else if err == service.ErrOrderFormat {
 				http.Error(res, err.Error(), http.StatusUnprocessableEntity)
 				return
-			} else if err == storage.ErrOrderIdNotUnique {
+			} else if err == storage.ErrOrderIDNotUnique {
 				resStatus = http.StatusOK
 			} else {
 				http.Error(res, err.Error(), http.StatusInternalServerError)
@@ -129,26 +129,26 @@ func (h *Handler) LoadOrder() http.HandlerFunc {
 
 func (h *Handler) GetOrderList() http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
-		ctx := req.Context()
-		login := middleware.LoginFromContext(ctx)
-		orderList, err := h.service.GetOrderList(ctx, login)
-		if err != nil {
-			http.Error(res, err.Error(), http.StatusInternalServerError)
-			return
-		}
+		// ctx := req.Context()
+		// login := middleware.LoginFromContext(ctx)
+		// orderList, err := h.service.GetOrderList(ctx, login)
+		// if err != nil {
+		// 	http.Error(res, err.Error(), http.StatusInternalServerError)
+		// 	return
+		// }
 		resStatus := http.StatusNoContent
-		var orderListJson []byte
-		if len(*orderList) != 0 {
-			orderListJson, err = json.Marshal(orderList)
-			if err != nil {
-				http.Error(res, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			resStatus = http.StatusOK
-		}
+		// var orderListJSON []byte
+		// if len(*orderList) != 0 {
+		// 	orderListJSON, err = json.Marshal(orderList)
+		// 	if err != nil {
+		// 		http.Error(res, err.Error(), http.StatusInternalServerError)
+		// 		return
+		// 	}
+		// 	resStatus = http.StatusOK
+		// }
 		res.Header().Set("content-type", "application/json")
 		res.WriteHeader(resStatus)
-		res.Write(orderListJson)
+		//res.Write(orderListJSON)
 	}
 }
 
@@ -178,7 +178,7 @@ func (h *Handler) WithdrawPoints() http.HandlerFunc {
 			} else if err == service.ErrOrderFormat {
 				http.Error(res, err.Error(), http.StatusUnprocessableEntity)
 				return
-			} else if err == storage.ErrOrderIdNotUnique {
+			} else if err == storage.ErrOrderIDNotUnique {
 				http.Error(res, err.Error(), http.StatusConflict)
 				return
 			} else if err == storage.ErrOutOfBalance {
@@ -205,8 +205,8 @@ func (h *Handler) GetAccrual() http.HandlerFunc {
 		result.Order = "123"
 		result.Status = "PROCESSED"
 		result.Accrual = 500
-		var orderListJson []byte
-		orderListJson, err := json.Marshal(result)
+		var orderListJSON []byte
+		orderListJSON, err := json.Marshal(result)
 		if err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
 			return
@@ -214,6 +214,6 @@ func (h *Handler) GetAccrual() http.HandlerFunc {
 		resStatus := http.StatusOK
 		res.Header().Set("content-type", "application/json")
 		res.WriteHeader(resStatus)
-		res.Write(orderListJson)
+		res.Write(orderListJSON)
 	}
 }

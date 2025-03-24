@@ -32,9 +32,9 @@ func (s *Server) RunServer() error {
 	// 	r.Use()
 	// })
 	r.Route("/api", func(r chi.Router) {
-		r.Post("/user/register1", s.handler.RegisterNewUser())
+		r.Post("/user/register", s.handler.RegisterNewUser())
 		r.Post("/user/login", s.handler.LoginUser())
-		r.Post("/user/orders1", middleware.Auth(s.handler.LoadOrder()))
+		r.Post("/user/orders", middleware.Auth(s.handler.LoadOrder()))
 		r.Get("/user/orders", middleware.Auth(s.handler.GetOrderList()))
 		// r.Get("/user/balance", middleware.Auth(s.handler.GetOrderList()))
 		r.Post("/user/balance/withdraw", middleware.Auth(s.handler.WithdrawPoints()))
