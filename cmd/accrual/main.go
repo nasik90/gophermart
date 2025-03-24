@@ -4,7 +4,7 @@ import (
 	"database/sql"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/nasik90/gophermart/cmd/gophermart/settings"
+	"github.com/nasik90/gophermart/cmd/accrual/settings"
 	"github.com/nasik90/gophermart/internal/app/handler"
 	"github.com/nasik90/gophermart/internal/app/logger"
 	"github.com/nasik90/gophermart/internal/app/server"
@@ -31,7 +31,6 @@ func main() {
 	}
 	s := service.NewService(repo)
 	h := handler.NewHandler(s)
-	go s.HandleOrderQueue(options.ServerAddress)
 	serv := server.NewServer(h, options.ServerAddress)
 	serv.RunServer()
 }

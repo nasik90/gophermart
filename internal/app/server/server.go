@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi"
-	handler "github.com/nasik90/gophermart/internal/app/handlers"
+	"github.com/nasik90/gophermart/internal/app/handler"
 	"github.com/nasik90/gophermart/internal/app/logger"
 	middleware "github.com/nasik90/gophermart/internal/app/middlewares"
 	"go.uber.org/zap"
@@ -39,6 +39,7 @@ func (s *Server) RunServer() error {
 		// r.Get("/user/balance", middleware.Auth(s.handler.GetOrderList()))
 		r.Post("/user/balance/withdraw", middleware.Auth(s.handler.WithdrawPoints()))
 		// r.Get("/user/user/withdrawals", middleware.Auth(s.handler.GetOrderList()))
+		r.Get("/accrual", s.handler.GetAccrual())
 	})
 	s.Handler = logger.RequestLogger((middleware.GzipMiddleware(r.ServeHTTP)))
 	err := s.ListenAndServe()

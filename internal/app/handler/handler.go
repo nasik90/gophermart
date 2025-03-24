@@ -193,3 +193,27 @@ func (h *Handler) WithdrawPoints() http.HandlerFunc {
 		res.WriteHeader(resStatus)
 	}
 }
+
+func (h *Handler) GetAccrual() http.HandlerFunc {
+	return func(res http.ResponseWriter, req *http.Request) {
+		type resType struct {
+			Order   string  `json:"order"`
+			Status  string  `json:"status"`
+			Accrual float32 `json:"accrual"`
+		}
+		var result resType
+		result.Order = "123"
+		result.Status = "PROCESSED"
+		result.Accrual = 500
+		var orderListJson []byte
+		orderListJson, err := json.Marshal(result)
+		if err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		resStatus := http.StatusOK
+		res.Header().Set("content-type", "application/json")
+		res.WriteHeader(resStatus)
+		res.Write(orderListJson)
+	}
+}

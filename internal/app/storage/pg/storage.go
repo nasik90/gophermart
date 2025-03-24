@@ -247,6 +247,15 @@ func (s *Store) getUserId(ctx context.Context, login string) (int, error) {
 	return userId, nil
 }
 
+func (s *Store) getUserByOrder(ctx context.Context, orderID int) (int, error) {
+	row := s.conn.QueryRowContext(ctx, `SELECT user_id FROM orders WHERE id = $1`, orderID)
+	var userId int
+	if err := row.Scan(&userId); err != nil {
+		return 0, err
+	}
+	return userId, nil
+}
+
 func (s *Store) GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error) {
 	var result []storage.OrderData
 
@@ -342,6 +351,58 @@ func (s *Store) WithdrawPoints(ctx context.Context, login string, orderId int, p
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO orders_points (date_time, order_id, user_id, flow_in, points) VALUES ($1, $2, $3, $4, $5)
 		`, time.Now(), orderId, userId, false, points)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Store) AccruePoints(ctx context.Context, orderId int, points float32) error {
+	userId, err := s.getUserByOrder(ctx, orderId)
+	if err != nil {
+		return err
+	}
+
+	tx, err := s.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `
+		SELECT user_id 
+		FROM users_current_points
+		WHERE user_id = $1 FOR UPDATE
+	`, userId); err != nil {
+		return err
+	}
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE users_current_points SET points_in = points_in + $1, balance = balance + $1  WHERE user_id = $2 
+	`, points, userId)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	// Если ничего не обновили, то добавляем баллы
+	if rowsAffected == 0 {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO users_current_points (user_id, points_in, points_out, balance) VALUES ($1, $2, $3, $4) 
+		`, userId, points, 0, points)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Пишем в таблицу orders_points
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO orders_points (date_time, order_id, user_id, flow_in, points) VALUES ($1, $2, $3, $4, $5)
+		`, time.Now(), orderId, userId, true, points)
 	if err != nil {
 		return err
 	}
