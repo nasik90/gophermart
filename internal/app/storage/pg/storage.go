@@ -49,6 +49,9 @@ func (s Store) Bootstrap(ctx context.Context) error {
 	    )
 	`)
 
+	tx.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS users_id_uidx ON users (id)`)
+	tx.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS users_login_uidx ON users (login)`)
+
 	// таблица заказов
 	tx.ExecContext(ctx, `
 	    CREATE TABLE IF NOT EXISTS orders (
@@ -57,6 +60,8 @@ func (s Store) Bootstrap(ctx context.Context) error {
 			uploaded_at timestamp NOT NULL
 	    )
 	`)
+
+	tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS orders_user_id_idx ON orders (user_id)`)
 
 	// таблица видов значений статусов заказа
 	tx.ExecContext(ctx, `
@@ -259,38 +264,37 @@ func (s *Store) getUserByOrder(ctx context.Context, OrderID int) (int, error) {
 func (s *Store) GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error) {
 	var result []storage.OrderData
 
-	queryText :=
-		`SELECT orders.id
-			,COALESCE(status_values_kinds.name, '') as status
-			,orders.uploaded_at
-			,COALESCE(orders_points.points, 0) as accrual
-		FROM orders
-			INNER JOIN users
-			ON orders.user_id = users.id
-			LEFT JOIN current_statuses
-			ON orders.id = current_statuses.order_id
-			LEFT JOIN status_values_kinds
-			ON current_statuses.status_id = status_values_kinds.id
-			LEFT JOIN orders_points
-			ON orders.id = orders_points.order_id
-		WHERE users.login = $1
-		`
-
 	// queryText :=
 	// 	`SELECT orders.id
-	// 		,'' as status
+	// 		,COALESCE(status_values_kinds.name, '') as status
 	// 		,orders.uploaded_at
-	// 		,0 as accrual
+	// 		,COALESCE(orders_points.points, 0) as accrual
 	// 	FROM orders
 	// 		INNER JOIN users
 	// 		ON orders.user_id = users.id
+	// 		LEFT JOIN current_statuses
+	// 		ON orders.id = current_statuses.order_id
+	// 		LEFT JOIN status_values_kinds
+	// 		ON current_statuses.status_id = status_values_kinds.id
+	// 		LEFT JOIN orders_points
+	// 		ON orders.id = orders_points.order_id
 	// 	WHERE users.login = $1
 	// 	`
+
+	queryText :=
+		`SELECT orders.id
+			,'' as status
+			,orders.uploaded_at
+			,0 as accrual
+		FROM orders
+			INNER JOIN users
+			ON orders.user_id = users.id
+		WHERE users.login = $1
+		`
 	rows, err := s.conn.QueryContext(ctx, queryText, login)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	for rows.Next() {
 		orderData := new(storage.OrderData)
 		if err := rows.Scan(&orderData.Number, &orderData.Status, &orderData.UploadedAt, &orderData.Accrual); err != nil {
@@ -303,7 +307,7 @@ func (s *Store) GetOrderList(ctx context.Context, login string) (*[]storage.Orde
 		return &result, err
 	}
 
-	return &result, nil
+	return &result, rows.Close()
 }
 
 func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error {
