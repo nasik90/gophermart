@@ -129,29 +129,29 @@ func (h *Handler) LoadOrder() http.HandlerFunc {
 
 func (h *Handler) GetOrderList() http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
-		// ctx := req.Context()
-		// login := middleware.LoginFromContext(ctx)
-		// orderList, err := h.service.GetOrderList(ctx, login)
-		// if err != nil {
-		// 	http.Error(res, err.Error(), http.StatusInternalServerError)
-		// 	return
-		// }
-		// resStatus := http.StatusNoContent
-		// var orderListJSON []byte
-		// if len(*orderList) != 0 {
-		// 	orderListJSON, err = json.Marshal(orderList)
-		// 	if err != nil {
-		// 		http.Error(res, err.Error(), http.StatusInternalServerError)
-		// 		return
-		// 	}
-		// 	resStatus = http.StatusOK
-		// }
-		// res.Header().Set("content-type", "application/json")
-		// res.WriteHeader(resStatus)
-		// res.Write(orderListJSON)
-
+		ctx := req.Context()
+		login := middleware.LoginFromContext(ctx)
+		orderList, err := h.service.GetOrderList(ctx, login)
+		if err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		resStatus := http.StatusNoContent
+		var orderListJSON []byte
+		if len(*orderList) != 0 {
+			orderListJSON, err = json.Marshal(orderList)
+			if err != nil {
+				http.Error(res, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			resStatus = http.StatusOK
+		}
 		res.Header().Set("content-type", "application/json")
-		res.WriteHeader(http.StatusOK)
+		res.WriteHeader(resStatus)
+		res.Write(orderListJSON)
+
+		// res.Header().Set("content-type", "application/json")
+		// res.WriteHeader(http.StatusOK)
 	}
 }
 

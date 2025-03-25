@@ -290,6 +290,7 @@ func (s *Store) GetOrderList(ctx context.Context, login string) (*[]storage.Orde
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	for rows.Next() {
 		orderData := new(storage.OrderData)
 		if err := rows.Scan(&orderData.Number, &orderData.Status, &orderData.UploadedAt, &orderData.Accrual); err != nil {
