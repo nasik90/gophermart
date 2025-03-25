@@ -281,33 +281,34 @@ func (s *Store) GetOrderList(ctx context.Context, login string) (*[]storage.Orde
 	// 	WHERE users.login = $1
 	// 	`
 
-	queryText :=
-		`SELECT orders.id
-			,'' as status
-			,orders.uploaded_at
-			,0 as accrual
-		FROM orders
-			INNER JOIN users
-			ON orders.user_id = users.id
-		WHERE users.login = $1
-		`
-	rows, err := s.conn.QueryContext(ctx, queryText, login)
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		orderData := new(storage.OrderData)
-		if err := rows.Scan(&orderData.Number, &orderData.Status, &orderData.UploadedAt, &orderData.Accrual); err != nil {
-			return nil, err
-		}
-		result = append(result, *orderData)
-	}
+	// queryText :=
+	// 	`SELECT orders.id
+	// 		,'' as status
+	// 		,orders.uploaded_at
+	// 		,0 as accrual
+	// 	FROM orders
+	// 		INNER JOIN users
+	// 		ON orders.user_id = users.id
+	// 	WHERE users.login = $1
+	// 	`
+	// rows, err := s.conn.QueryContext(ctx, queryText, login)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// for rows.Next() {
+	// 	orderData := new(storage.OrderData)
+	// 	if err := rows.Scan(&orderData.Number, &orderData.Status, &orderData.UploadedAt, &orderData.Accrual); err != nil {
+	// 		return nil, err
+	// 	}
+	// 	result = append(result, *orderData)
+	// }
 
-	if err := rows.Err(); err != nil {
-		return &result, err
-	}
+	// if err := rows.Err(); err != nil {
+	// 	return &result, err
+	// }
 
-	return &result, rows.Close()
+	// return &result, rows.Close()
+	return &result, nil
 }
 
 func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error {
