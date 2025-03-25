@@ -167,7 +167,7 @@ func (s *Store) UserIsValid(ctx context.Context, login, password string) (bool, 
 
 func (s *Store) SaveNewOrder(ctx context.Context, id int, login string) error {
 
-	userId, err := s.getUserId(ctx, login)
+	userID, err := s.getUserID(ctx, login)
 	if err != nil {
 		return err
 	}
@@ -178,7 +178,7 @@ func (s *Store) SaveNewOrder(ctx context.Context, id int, login string) error {
 	}
 	defer tx.Rollback()
 
-	err = createOrderWithStatusNew(ctx, tx, id, userId)
+	err = createOrderWithStatusNew(ctx, tx, id, userID)
 	if err != nil {
 		return err
 	}
@@ -186,20 +186,20 @@ func (s *Store) SaveNewOrder(ctx context.Context, id int, login string) error {
 	return tx.Commit()
 }
 
-func createOrderWithStatusNew(ctx context.Context, tx *sql.Tx, id int, userId int) error {
+func createOrderWithStatusNew(ctx context.Context, tx *sql.Tx, id int, userID int) error {
 	uploadedAt := time.Now()
 	_, err := tx.ExecContext(ctx, `
         INSERT INTO orders (id, user_id, uploaded_at) VALUES ($1, $2, $3)`,
-		id, userId, uploadedAt)
+		id, userID, uploadedAt)
 
 	err = saveNewOrderCheckInsertError(err)
 	if err == storage.ErrOrderIDNotUnique {
 		row := tx.QueryRowContext(ctx, `SELECT user_id FROM orders WHERE id = $1`, id)
-		var OrderUserId int
-		if err := row.Scan(&OrderUserId); err != nil {
+		var OrderUserID int
+		if err := row.Scan(&OrderUserID); err != nil {
 			return err
 		}
-		if OrderUserId != userId {
+		if OrderUserID != userID {
 			return storage.ErrOrderLoadedByAnotherUser
 		}
 	}
@@ -238,22 +238,22 @@ func saveNewOrderCheckInsertError(err error) error {
 	return err
 }
 
-func (s *Store) getUserId(ctx context.Context, login string) (int, error) {
+func (s *Store) getUserID(ctx context.Context, login string) (int, error) {
 	row := s.conn.QueryRowContext(ctx, `SELECT id FROM users WHERE login = $1`, login)
-	var userId int
-	if err := row.Scan(&userId); err != nil {
+	var userID int
+	if err := row.Scan(&userID); err != nil {
 		return 0, err
 	}
-	return userId, nil
+	return userID, nil
 }
 
 func (s *Store) getUserByOrder(ctx context.Context, OrderID int) (int, error) {
 	row := s.conn.QueryRowContext(ctx, `SELECT user_id FROM orders WHERE id = $1`, OrderID)
-	var userId int
-	if err := row.Scan(&userId); err != nil {
+	var userID int
+	if err := row.Scan(&userID); err != nil {
 		return 0, err
 	}
-	return userId, nil
+	return userID, nil
 }
 
 func (s *Store) GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error) {
@@ -295,7 +295,7 @@ func (s *Store) GetOrderList(ctx context.Context, login string) (*[]storage.Orde
 }
 
 func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error {
-	userId, err := s.getUserId(ctx, login)
+	userID, err := s.getUserID(ctx, login)
 	if err != nil {
 		return err
 	}
@@ -310,13 +310,13 @@ func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, p
 		SELECT user_id 
 		FROM users_current_points
 		WHERE user_id = $1 FOR UPDATE
-	`, userId); err != nil {
+	`, userID); err != nil {
 		return err
 	}
 
 	res, err := tx.ExecContext(ctx, `
 		UPDATE users_current_points SET points_out = points_out + $1, balance = balance - $1  WHERE user_id = $2 
-	`, points, userId)
+	`, points, userID)
 	if err != nil {
 		return err
 	}
@@ -332,17 +332,20 @@ func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, p
 		//Проверяем не ушли ли в минус
 		rows, err := tx.QueryContext(ctx, `
 			SELECT balance FROM users_current_points WHERE user_id = $1 and balance < 0
-		`, userId)
+		`, userID)
 		if err != nil {
 			return err
 		}
+		defer rows.Close()
 		for rows.Next() {
 			return storage.ErrOutOfBalance
-			break
+		}
+		if err := rows.Err(); err != nil {
+			return err
 		}
 	}
 	// Создем заказ
-	err = createOrderWithStatusNew(ctx, tx, OrderID, userId)
+	err = createOrderWithStatusNew(ctx, tx, OrderID, userID)
 	if err != nil {
 		return err
 	}
@@ -350,7 +353,7 @@ func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, p
 	// Пишем в таблицу orders_points
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO orders_points (date_time, order_id, user_id, flow_in, points) VALUES ($1, $2, $3, $4, $5)
-		`, time.Now(), OrderID, userId, false, points)
+		`, time.Now(), OrderID, userID, false, points)
 	if err != nil {
 		return err
 	}
@@ -359,7 +362,7 @@ func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, p
 }
 
 func (s *Store) AccruePoints(ctx context.Context, OrderID int, points float32) error {
-	userId, err := s.getUserByOrder(ctx, OrderID)
+	userID, err := s.getUserByOrder(ctx, OrderID)
 	if err != nil {
 		return err
 	}
@@ -374,13 +377,13 @@ func (s *Store) AccruePoints(ctx context.Context, OrderID int, points float32) e
 		SELECT user_id 
 		FROM users_current_points
 		WHERE user_id = $1 FOR UPDATE
-	`, userId); err != nil {
+	`, userID); err != nil {
 		return err
 	}
 
 	res, err := tx.ExecContext(ctx, `
 		UPDATE users_current_points SET points_in = points_in + $1, balance = balance + $1  WHERE user_id = $2 
-	`, points, userId)
+	`, points, userID)
 	if err != nil {
 		return err
 	}
@@ -393,7 +396,7 @@ func (s *Store) AccruePoints(ctx context.Context, OrderID int, points float32) e
 	if rowsAffected == 0 {
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO users_current_points (user_id, points_in, points_out, balance) VALUES ($1, $2, $3, $4) 
-		`, userId, points, 0, points)
+		`, userID, points, 0, points)
 		if err != nil {
 			return err
 		}
@@ -402,7 +405,7 @@ func (s *Store) AccruePoints(ctx context.Context, OrderID int, points float32) e
 	// Пишем в таблицу orders_points
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO orders_points (date_time, order_id, user_id, flow_in, points) VALUES ($1, $2, $3, $4, $5)
-		`, time.Now(), OrderID, userId, true, points)
+		`, time.Now(), OrderID, userID, true, points)
 	if err != nil {
 		return err
 	}
