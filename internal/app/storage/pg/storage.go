@@ -261,7 +261,7 @@ func (s *Store) getUserByOrder(ctx context.Context, OrderID int) (int, error) {
 	return userID, nil
 }
 
-func (s *Store) GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error) {
+func (s *Store) GetOrderList(ctx context.Context, login string) ([]storage.OrderData, error) {
 	var result []storage.OrderData
 
 	// queryText :=
@@ -308,7 +308,7 @@ func (s *Store) GetOrderList(ctx context.Context, login string) (*[]storage.Orde
 	// }
 
 	// return &result, rows.Close()
-	return &result, nil
+	return result, nil
 }
 
 func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error {

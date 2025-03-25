@@ -15,7 +15,7 @@ type Repository interface {
 	SaveNewUser(ctx context.Context, user, password string) error
 	UserIsValid(ctx context.Context, login, password string) (bool, error)
 	SaveNewOrder(ctx context.Context, orderNumber int, login string) error
-	GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error)
+	GetOrderList(ctx context.Context, login string) ([]storage.OrderData, error)
 	WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error
 	AccruePoints(ctx context.Context, OrderID int, points float32) error
 }
@@ -53,7 +53,7 @@ func (s *Service) LoadOrder(ctx context.Context, OrderID int, login string) erro
 	return nil
 }
 
-func (s *Service) GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error) {
+func (s *Service) GetOrderList(ctx context.Context, login string) ([]storage.OrderData, error) {
 	return s.repo.GetOrderList(ctx, login)
 }
 

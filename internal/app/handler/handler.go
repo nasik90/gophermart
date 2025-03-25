@@ -16,7 +16,7 @@ type Service interface {
 	RegisterNewUser(ctx context.Context, user, password string) error
 	UserIsValid(ctx context.Context, login, password string) (bool, error)
 	LoadOrder(ctx context.Context, orderNumber int, login string) error
-	GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error)
+	GetOrderList(ctx context.Context, login string) ([]storage.OrderData, error)
 	WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error
 }
 
@@ -138,7 +138,7 @@ func (h *Handler) GetOrderList() http.HandlerFunc {
 		}
 		resStatus := http.StatusNoContent
 		var orderListJSON []byte
-		if len(*orderList) != 0 {
+		if len(orderList) != 0 {
 			orderListJSON, err = json.Marshal(orderList)
 			if err != nil {
 				http.Error(res, err.Error(), http.StatusInternalServerError)
