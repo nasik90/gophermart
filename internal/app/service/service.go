@@ -7,10 +7,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/nasik90/gophermart/internal/app/logger"
 	"github.com/nasik90/gophermart/internal/app/storage"
 	"github.com/phedde/luhn-algorithm"
-	"go.uber.org/zap"
 )
 
 type Repository interface {
@@ -44,10 +42,10 @@ func (s *Service) UserIsValid(ctx context.Context, login, password string) (bool
 }
 
 func (s *Service) LoadOrder(ctx context.Context, OrderID int, login string) error {
-	isValid := luhn.IsValid(int64(OrderID))
-	if !isValid {
-		return ErrOrderFormat
-	}
+	// isValid := luhn.IsValid(int64(OrderID))
+	// if !isValid {
+	// 	return ErrOrderFormat
+	// }
 	if err := s.repo.SaveNewOrder(ctx, OrderID, login); err != nil {
 		return err
 	}
@@ -72,23 +70,24 @@ func (s *Service) loadOrderIDInOrderQueue(OrderID int) {
 }
 
 func (s *Service) HandleOrderQueue(serverAddress string) {
-	const (
-		statusPROCESSED = "PROCESSED"
-	)
-	for OrderID := range s.ordersCh {
-		points, status, err := GetAccrualByOrderID(OrderID, serverAddress)
-		if err != nil {
-			logger.Log.Error("accural api handle", zap.String("error", err.Error()))
-		}
-		if status == statusPROCESSED {
-			s.repo.AccruePoints(context.Background(), OrderID, points)
-		}
-	}
+	// const (
+	// 	statusPROCESSED = "PROCESSED"
+	// )
+	//for orderID := range s.ordersCh {
+	// points, status, err := GetAccrualByOrderID(orderID, serverAddress)
+	// if err != nil {
+	// 	logger.Log.Error("accural api handle", zap.String("error", err.Error()))
+	// }
+	// if status == statusPROCESSED {
+	// 	s.repo.AccruePoints(context.Background(), orderID, points)
+	// }
+	//}
+	<-s.ordersCh
 }
 
-func GetAccrualByOrderID(OrderID int, serverAddress string) (float32, string, error) {
+func GetAccrualByOrderID(orderID int, serverAddress string) (float32, string, error) {
 	client := &http.Client{}
-	url := serverAddress + "/api/accrual/" + strconv.Itoa(OrderID)
+	url := serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
 	request, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		panic(err)

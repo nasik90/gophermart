@@ -28,9 +28,7 @@ func (s *Server) RunServer() error {
 	logger.Log.Info("Running server", zap.String("address", s.Addr))
 
 	r := chi.NewRouter()
-	// r.Group(func(r chi.Router) {
-	// 	r.Use()
-	// })
+
 	r.Route("/api", func(r chi.Router) {
 		r.Post("/user/register", s.handler.RegisterNewUser())
 		r.Post("/user/login", s.handler.LoginUser())
