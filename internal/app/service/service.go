@@ -8,16 +8,17 @@ import (
 	"strconv"
 
 	"github.com/nasik90/gophermart/internal/app/storage"
-	"github.com/phedde/luhn-algorithm"
 )
 
 type Repository interface {
 	SaveNewUser(ctx context.Context, user, password string) error
 	UserIsValid(ctx context.Context, login, password string) (bool, error)
 	SaveNewOrder(ctx context.Context, orderNumber int, login string) error
-	GetOrderList(ctx context.Context, login string) ([]storage.OrderData, error)
+	GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error)
 	WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error
 	AccruePoints(ctx context.Context, OrderID int, points float32) error
+	GetUserBalance(ctx context.Context, login string) (*storage.UserBalance, error)
+	GetWithdrawals(ctx context.Context, login string) (*[]storage.Withdrawals, error)
 }
 
 var (
@@ -53,15 +54,15 @@ func (s *Service) LoadOrder(ctx context.Context, OrderID int, login string) erro
 	return nil
 }
 
-func (s *Service) GetOrderList(ctx context.Context, login string) ([]storage.OrderData, error) {
+func (s *Service) GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error) {
 	return s.repo.GetOrderList(ctx, login)
 }
 
 func (s *Service) WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error {
-	isValid := luhn.IsValid(int64(OrderID))
-	if !isValid {
-		return ErrOrderFormat
-	}
+	// isValid := luhn.IsValid(int64(OrderID))
+	// if !isValid {
+	// 	return ErrOrderFormat
+	// }
 	return s.repo.WithdrawPoints(ctx, login, OrderID, points)
 }
 
@@ -107,4 +108,12 @@ func GetAccrualByOrderID(orderID int, serverAddress string) (float32, string, er
 		return 0, "", err
 	}
 	return orderData.Accrual, orderData.Status, nil
+}
+
+func (s *Service) GetUserBalance(ctx context.Context, login string) (*storage.UserBalance, error) {
+	return s.repo.GetUserBalance(ctx, login)
+}
+
+func (s *Service) GetWithdrawals(ctx context.Context, login string) (*[]storage.Withdrawals, error) {
+	return s.repo.GetWithdrawals(ctx, login)
 }

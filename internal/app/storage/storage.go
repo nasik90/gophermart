@@ -18,3 +18,14 @@ type OrderData struct {
 	Accrual    int       `json:"accrual,omitempty"`
 	UploadedAt time.Time `json:"uploaded_at"`
 }
+
+type UserBalance struct {
+	Current   float64 `json:"current"`
+	Withdrawn float64 `json:"withdrawn"`
+}
+
+type Withdrawals struct {
+	Order       string    `json:"order"`
+	Sum         float64   `json:"sum"`
+	ProcessedAt time.Time `json:"processed_at"`
+}

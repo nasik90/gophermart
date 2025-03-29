@@ -16,8 +16,10 @@ type Service interface {
 	RegisterNewUser(ctx context.Context, user, password string) error
 	UserIsValid(ctx context.Context, login, password string) (bool, error)
 	LoadOrder(ctx context.Context, orderNumber int, login string) error
-	GetOrderList(ctx context.Context, login string) ([]storage.OrderData, error)
+	GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error)
 	WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error
+	GetUserBalance(ctx context.Context, login string) (*storage.UserBalance, error)
+	GetWithdrawals(ctx context.Context, login string) (*[]storage.Withdrawals, error)
 }
 
 type Handler struct {
@@ -138,7 +140,7 @@ func (h *Handler) GetOrderList() http.HandlerFunc {
 		}
 		resStatus := http.StatusNoContent
 		var orderListJSON []byte
-		if len(orderList) != 0 {
+		if len(*orderList) != 0 {
 			orderListJSON, err = json.Marshal(orderList)
 			if err != nil {
 				http.Error(res, err.Error(), http.StatusInternalServerError)
@@ -218,5 +220,54 @@ func (h *Handler) GetAccrual() http.HandlerFunc {
 		res.Header().Set("content-type", "application/json")
 		res.WriteHeader(resStatus)
 		res.Write(orderListJSON)
+	}
+}
+
+func (h *Handler) GetUserBalance() http.HandlerFunc {
+	return func(res http.ResponseWriter, req *http.Request) {
+		ctx := req.Context()
+		login := middleware.LoginFromContext(ctx)
+		userBalance, err := h.service.GetUserBalance(ctx, login)
+		if err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		var userBalanceJSON []byte
+		userBalanceJSON, err = json.Marshal(userBalance)
+		if err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		res.Header().Set("content-type", "application/json")
+		res.WriteHeader(http.StatusOK)
+		res.Write(userBalanceJSON)
+	}
+}
+
+func (h *Handler) GetWithdrawals() http.HandlerFunc {
+	return func(res http.ResponseWriter, req *http.Request) {
+		ctx := req.Context()
+		login := middleware.LoginFromContext(ctx)
+		orderList, err := h.service.GetWithdrawals(ctx, login)
+		if err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		resStatus := http.StatusNoContent
+		var orderListJSON []byte
+		if len(*orderList) != 0 {
+			orderListJSON, err = json.Marshal(orderList)
+			if err != nil {
+				http.Error(res, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			resStatus = http.StatusOK
+		}
+		res.Header().Set("content-type", "application/json")
+		res.WriteHeader(resStatus)
+		res.Write(orderListJSON)
+
+		// res.Header().Set("content-type", "application/json")
+		// res.WriteHeader(http.StatusOK)
 	}
 }

@@ -261,25 +261,25 @@ func (s *Store) getUserByOrder(ctx context.Context, OrderID int) (int, error) {
 	return userID, nil
 }
 
-func (s *Store) GetOrderList(ctx context.Context, login string) ([]storage.OrderData, error) {
+func (s *Store) GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error) {
 	var result []storage.OrderData
 
-	// queryText :=
-	// 	`SELECT orders.id
-	// 		,COALESCE(status_values_kinds.name, '') as status
-	// 		,orders.uploaded_at
-	// 		,COALESCE(orders_points.points, 0) as accrual
-	// 	FROM orders
-	// 		INNER JOIN users
-	// 		ON orders.user_id = users.id
-	// 		LEFT JOIN current_statuses
-	// 		ON orders.id = current_statuses.order_id
-	// 		LEFT JOIN status_values_kinds
-	// 		ON current_statuses.status_id = status_values_kinds.id
-	// 		LEFT JOIN orders_points
-	// 		ON orders.id = orders_points.order_id
-	// 	WHERE users.login = $1
-	// 	`
+	queryText :=
+		`SELECT orders.id
+			,COALESCE(status_values_kinds.name, '') as status
+			,orders.uploaded_at
+			,COALESCE(orders_points.points, 0) as accrual
+		FROM orders
+			INNER JOIN users
+			ON orders.user_id = users.id
+			LEFT JOIN current_statuses
+			ON orders.id = current_statuses.order_id
+			LEFT JOIN status_values_kinds
+			ON current_statuses.status_id = status_values_kinds.id
+			LEFT JOIN orders_points
+			ON orders.id = orders_points.order_id
+		WHERE users.login = $1
+		`
 
 	// queryText :=
 	// 	`SELECT orders.id
@@ -291,24 +291,24 @@ func (s *Store) GetOrderList(ctx context.Context, login string) ([]storage.Order
 	// 		ON orders.user_id = users.id
 	// 	WHERE users.login = $1
 	// 	`
-	// rows, err := s.conn.QueryContext(ctx, queryText, login)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// for rows.Next() {
-	// 	orderData := new(storage.OrderData)
-	// 	if err := rows.Scan(&orderData.Number, &orderData.Status, &orderData.UploadedAt, &orderData.Accrual); err != nil {
-	// 		return nil, err
-	// 	}
-	// 	result = append(result, *orderData)
-	// }
+	rows, err := s.conn.QueryContext(ctx, queryText, login)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		orderData := new(storage.OrderData)
+		if err := rows.Scan(&orderData.Number, &orderData.Status, &orderData.UploadedAt, &orderData.Accrual); err != nil {
+			return nil, err
+		}
+		result = append(result, *orderData)
+	}
 
-	// if err := rows.Err(); err != nil {
-	// 	return &result, err
-	// }
+	if err := rows.Err(); err != nil {
+		return &result, err
+	}
 
-	// return &result, rows.Close()
-	return result, nil
+	return &result, rows.Close()
+	//return result, nil
 }
 
 func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error {
@@ -428,4 +428,63 @@ func (s *Store) AccruePoints(ctx context.Context, OrderID int, points float32) e
 	}
 
 	return tx.Commit()
+}
+
+func (s *Store) GetUserBalance(ctx context.Context, login string) (*storage.UserBalance, error) {
+
+	var result storage.UserBalance
+
+	stmt, err := s.conn.PrepareContext(ctx,
+		`SELECT  p.balance, p.points_out
+			FROM users_current_points p
+			INNER JOIN users u
+			ON p.user_id = u.id
+			WHERE u.login = $1`)
+
+	if err != nil {
+		return &result, err
+	}
+
+	row := stmt.QueryRowContext(ctx, login)
+	if row.Err() != nil {
+		return &result, err
+	}
+	if err := row.Scan(&result.Current, &result.Withdrawn); err != nil {
+		return &result, err
+	}
+	return &result, nil
+
+}
+
+func (s *Store) GetWithdrawals(ctx context.Context, login string) (*[]storage.Withdrawals, error) {
+
+	var result []storage.Withdrawals
+
+	stmt, err := s.conn.PrepareContext(ctx,
+		`SELECT date_time, order_id, points
+			FROM orders_points o
+			INNER JOIN users u
+			ON o.user_id = u.id
+		WHERE u.login = $1  and o.flow_in = false`)
+
+	if err != nil {
+		return &result, err
+	}
+
+	rows, err := stmt.QueryContext(ctx, login)
+	if err != nil {
+		return &result, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		withdrawals := new(storage.Withdrawals)
+		if err := rows.Scan(&withdrawals.ProcessedAt, &withdrawals.Order, &withdrawals.Sum); err != nil {
+			return nil, err
+		}
+		result = append(result, *withdrawals)
+	}
+	if err := rows.Err(); err != nil {
+		return &result, err
+	}
+	return &result, rows.Close()
 }
