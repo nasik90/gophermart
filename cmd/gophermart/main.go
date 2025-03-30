@@ -35,7 +35,7 @@ func main() {
 	if err != nil {
 		logger.Log.Fatal("create pg repo", zap.String("DatabaseDSN", options.DatabaseURI), zap.String("error", err.Error()))
 	}
-	s := service.NewService(repo)
+	s := service.NewService(repo, options.CheckOrderID)
 	h := handler.NewHandler(s)
 	go s.HandleOrderQueue(options.AccrualServerAddress)
 	go s.HandleBadOrdersQueue()

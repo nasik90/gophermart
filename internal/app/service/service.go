@@ -35,13 +35,14 @@ var (
 )
 
 type Service struct {
-	repo        Repository
-	ordersCh    chan int
-	badOrdersCh chan int
+	repo         Repository
+	ordersCh     chan int
+	badOrdersCh  chan int
+	checkOrderID bool
 }
 
-func NewService(store Repository) *Service {
-	return &Service{repo: store, ordersCh: make(chan int), badOrdersCh: make(chan int)}
+func NewService(store Repository, checkOrderID bool) *Service {
+	return &Service{repo: store, ordersCh: make(chan int), badOrdersCh: make(chan int), checkOrderID: checkOrderID}
 }
 
 func (s *Service) RegisterNewUser(ctx context.Context, login, password string) error {
