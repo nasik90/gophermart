@@ -47,10 +47,10 @@ func (s *Service) UserIsValid(ctx context.Context, login, password string) (bool
 }
 
 func (s *Service) LoadOrder(ctx context.Context, OrderID int, login string) error {
-	// isValid := luhn.IsValid(int64(OrderID))
-	// if !isValid {
-	// 	return ErrOrderFormat
-	// }
+	isValid := luhn.IsValid(int64(OrderID))
+	if !isValid {
+		return ErrOrderFormat
+	}
 	if err := s.repo.SaveNewOrder(ctx, OrderID, login); err != nil {
 		return err
 	}

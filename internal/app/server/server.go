@@ -40,7 +40,7 @@ func (s *Server) RunServer() error {
 		// список списаний
 		r.Get("/user/withdrawals", middleware.Auth(s.handler.GetWithdrawals()))
 		// имитация ручки accrual сервиса
-		//r.Get("/accrual/{id}", s.handler.GetAccrual())
+		r.Get("/accrual/{id}", s.handler.GetAccrual())
 	})
 	s.Handler = logger.RequestLogger((middleware.GzipMiddleware(r.ServeHTTP)))
 	err := s.ListenAndServe()
