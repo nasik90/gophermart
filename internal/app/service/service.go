@@ -140,7 +140,7 @@ func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, er
 	start := time.Now()
 	client := &http.Client{}
 	//url := "http://" + serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
-	url := serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
+	url := serverAddress + "/api/orders/" + strconv.Itoa(orderID)
 	logger.Log.Info("accural handle", zap.String("api url", url))
 	request, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
