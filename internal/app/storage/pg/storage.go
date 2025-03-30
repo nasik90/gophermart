@@ -193,12 +193,22 @@ func (s *Store) SaveNewOrder(ctx context.Context, id int, login string) error {
 
 func createOrderWithStatusNew(ctx context.Context, tx *sql.Tx, id int, userID int) error {
 	uploadedAt := time.Now()
+
+	if _, err := tx.ExecContext(ctx, `
+		SAVEPOINT my_savepoint`); err != nil {
+		return err
+	}
+
 	_, err := tx.ExecContext(ctx, `
         INSERT INTO orders (id, user_id, uploaded_at) VALUES ($1, $2, $3)`,
 		id, userID, uploadedAt)
 
 	err = saveNewOrderCheckInsertError(err)
 	if err == storage.ErrOrderIDNotUnique {
+		if _, err := tx.ExecContext(ctx, `
+			ROLLBACK TO SAVEPOINT my_savepoint`); err != nil {
+			return err
+		}
 		row := tx.QueryRowContext(ctx, `SELECT user_id FROM orders WHERE id = $1`, id)
 		var OrderUserID int
 		if err := row.Scan(&OrderUserID); err != nil {
@@ -311,7 +321,8 @@ func (s *Store) GetOrderList(ctx context.Context, login string) (*[]storage.Orde
 	//return result, nil
 }
 
-func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error {
+// списание баллов
+func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, points float64) error {
 	userID, err := s.getUserID(ctx, login)
 	if err != nil {
 		return err
@@ -378,7 +389,8 @@ func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, p
 	return tx.Commit()
 }
 
-func (s *Store) AccruePoints(ctx context.Context, OrderID int, points float32) error {
+// начисление баллов
+func (s *Store) AccruePoints(ctx context.Context, OrderID int, points float64) error {
 	userID, err := s.getUserByOrder(ctx, OrderID)
 	if err != nil {
 		return err
@@ -456,6 +468,7 @@ func (s *Store) GetUserBalance(ctx context.Context, login string) (*storage.User
 
 }
 
+// список списаний
 func (s *Store) GetWithdrawals(ctx context.Context, login string) (*[]storage.Withdrawals, error) {
 
 	var result []storage.Withdrawals

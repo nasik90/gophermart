@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/nasik90/gophermart/internal/app/logger"
 	"github.com/nasik90/gophermart/internal/app/storage"
+	"go.uber.org/zap"
 )
 
 type Repository interface {
@@ -15,8 +17,8 @@ type Repository interface {
 	UserIsValid(ctx context.Context, login, password string) (bool, error)
 	SaveNewOrder(ctx context.Context, orderNumber int, login string) error
 	GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error)
-	WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error
-	AccruePoints(ctx context.Context, OrderID int, points float32) error
+	WithdrawPoints(ctx context.Context, login string, OrderID int, points float64) error
+	AccruePoints(ctx context.Context, OrderID int, points float64) error
 	GetUserBalance(ctx context.Context, login string) (*storage.UserBalance, error)
 	GetWithdrawals(ctx context.Context, login string) (*[]storage.Withdrawals, error)
 }
@@ -58,7 +60,8 @@ func (s *Service) GetOrderList(ctx context.Context, login string) (*[]storage.Or
 	return s.repo.GetOrderList(ctx, login)
 }
 
-func (s *Service) WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error {
+// списание баллов
+func (s *Service) WithdrawPoints(ctx context.Context, login string, OrderID int, points float64) error {
 	// isValid := luhn.IsValid(int64(OrderID))
 	// if !isValid {
 	// 	return ErrOrderFormat
@@ -71,24 +74,24 @@ func (s *Service) loadOrderIDInOrderQueue(OrderID int) {
 }
 
 func (s *Service) HandleOrderQueue(serverAddress string) {
-	// const (
-	// 	statusPROCESSED = "PROCESSED"
-	// )
-	//for orderID := range s.ordersCh {
-	// points, status, err := GetAccrualByOrderID(orderID, serverAddress)
-	// if err != nil {
-	// 	logger.Log.Error("accural api handle", zap.String("error", err.Error()))
-	// }
-	// if status == statusPROCESSED {
-	// 	s.repo.AccruePoints(context.Background(), orderID, points)
-	// }
-	//}
-	<-s.ordersCh
+	const (
+		statusPROCESSED = "PROCESSED"
+	)
+	for orderID := range s.ordersCh {
+		points, status, err := GetAccrualByOrderID(orderID, serverAddress)
+		if err != nil {
+			logger.Log.Error("accural api handle", zap.String("error", err.Error()))
+		}
+		if status == statusPROCESSED {
+			s.repo.AccruePoints(context.Background(), orderID, points)
+		}
+	}
+	//<-s.ordersCh
 }
 
-func GetAccrualByOrderID(orderID int, serverAddress string) (float32, string, error) {
+func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, error) {
 	client := &http.Client{}
-	url := serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
+	url := "http://" + serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
 	request, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		panic(err)
@@ -101,7 +104,7 @@ func GetAccrualByOrderID(orderID int, serverAddress string) (float32, string, er
 	type orderDataType struct {
 		Order   string  `json:"order"`
 		Status  string  `json:"status"`
-		Accrual float32 `json:"accrual"`
+		Accrual float64 `json:"accrual"`
 	}
 	var orderData orderDataType
 	if err := json.NewDecoder(response.Body).Decode(&orderData); err != nil {
@@ -114,6 +117,7 @@ func (s *Service) GetUserBalance(ctx context.Context, login string) (*storage.Us
 	return s.repo.GetUserBalance(ctx, login)
 }
 
+// список списаний
 func (s *Service) GetWithdrawals(ctx context.Context, login string) (*[]storage.Withdrawals, error) {
 	return s.repo.GetWithdrawals(ctx, login)
 }

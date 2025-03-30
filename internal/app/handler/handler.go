@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	middleware "github.com/nasik90/gophermart/internal/app/middlewares"
 	"github.com/nasik90/gophermart/internal/app/service"
@@ -17,7 +18,7 @@ type Service interface {
 	UserIsValid(ctx context.Context, login, password string) (bool, error)
 	LoadOrder(ctx context.Context, orderNumber int, login string) error
 	GetOrderList(ctx context.Context, login string) (*[]storage.OrderData, error)
-	WithdrawPoints(ctx context.Context, login string, OrderID int, points float32) error
+	WithdrawPoints(ctx context.Context, login string, OrderID int, points float64) error
 	GetUserBalance(ctx context.Context, login string) (*storage.UserBalance, error)
 	GetWithdrawals(ctx context.Context, login string) (*[]storage.Withdrawals, error)
 }
@@ -157,13 +158,14 @@ func (h *Handler) GetOrderList() http.HandlerFunc {
 	}
 }
 
+// списание баллов
 func (h *Handler) WithdrawPoints() http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
 		ctx := req.Context()
 		login := middleware.LoginFromContext(ctx)
 		var input struct {
 			Order string  `json:"order"`
-			Sum   float32 `json:"sum"`
+			Sum   float64 `json:"sum"`
 		}
 		if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
 			http.Error(res, err.Error(), http.StatusBadRequest)
@@ -199,17 +201,20 @@ func (h *Handler) WithdrawPoints() http.HandlerFunc {
 	}
 }
 
+// имитация ручки accrual сервиса
 func (h *Handler) GetAccrual() http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
 		type resType struct {
 			Order   string  `json:"order"`
 			Status  string  `json:"status"`
-			Accrual float32 `json:"accrual"`
+			Accrual float64 `json:"accrual"`
 		}
 		var result resType
-		result.Order = "123"
+		pathSlice := strings.Split(req.URL.Path, "/")
+		orderID := pathSlice[len(pathSlice)-1]
+		result.Order = orderID
 		result.Status = "PROCESSED"
-		result.Accrual = 500
+		result.Accrual = 500.00
 		var orderListJSON []byte
 		orderListJSON, err := json.Marshal(result)
 		if err != nil {
