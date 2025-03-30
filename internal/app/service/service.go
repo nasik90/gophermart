@@ -11,7 +11,6 @@ import (
 
 	"github.com/nasik90/gophermart/internal/app/logger"
 	"github.com/nasik90/gophermart/internal/app/storage"
-	"github.com/phedde/luhn-algorithm"
 	"go.uber.org/zap"
 )
 
@@ -34,12 +33,13 @@ var (
 )
 
 type Service struct {
-	repo     Repository
-	ordersCh chan int
+	repo        Repository
+	ordersCh    chan int
+	badOrdersCh chan int
 }
 
 func NewService(store Repository) *Service {
-	return &Service{repo: store, ordersCh: make(chan int)}
+	return &Service{repo: store, ordersCh: make(chan int), badOrdersCh: make(chan int)}
 }
 
 func (s *Service) RegisterNewUser(ctx context.Context, login, password string) error {
@@ -51,10 +51,10 @@ func (s *Service) UserIsValid(ctx context.Context, login, password string) (bool
 }
 
 func (s *Service) LoadOrder(ctx context.Context, OrderID int, login string) error {
-	isValid := luhn.IsValid(int64(OrderID))
-	if !isValid {
-		return ErrOrderFormat
-	}
+	// isValid := luhn.IsValid(int64(OrderID))
+	// if !isValid {
+	// 	return ErrOrderFormat
+	// }
 	if err := s.repo.SaveNewOrder(ctx, OrderID, login); err != nil {
 		return err
 	}
@@ -68,10 +68,10 @@ func (s *Service) GetOrderList(ctx context.Context, login string) (*[]storage.Or
 
 // списание баллов
 func (s *Service) WithdrawPoints(ctx context.Context, login string, OrderID int, points float64) error {
-	isValid := luhn.IsValid(int64(OrderID))
-	if !isValid {
-		return ErrOrderFormat
-	}
+	// isValid := luhn.IsValid(int64(OrderID))
+	// if !isValid {
+	// 	return ErrOrderFormat
+	// }
 	return s.repo.WithdrawPoints(ctx, login, OrderID, points)
 }
 
@@ -86,7 +86,6 @@ func (s *Service) HandleOrderQueue(serverAddress string) {
 		statusPROCESSING = "PROCESSING"
 		statusPROCESSED  = "PROCESSED"
 	)
-	ticker := time.NewTicker(5 * time.Second)
 	ctx := context.Background()
 	//orderIDsForRepeat := []int
 	for {
@@ -96,52 +95,57 @@ func (s *Service) HandleOrderQueue(serverAddress string) {
 			points, status, err := GetAccrualByOrderID(orderID, serverAddress)
 			if err == ErrTooManyRequests {
 				time.Sleep(3 * time.Second)
-				//s.ordersCh <- orderID
+				s.badOrdersCh <- orderID
 			}
 			if err != nil {
 				logger.Log.Error("accural api handle", zap.String("error", err.Error()))
 			}
 			switch status {
 			case statusREGISTERED:
-				//s.ordersCh <- orderID
+				s.badOrdersCh <- orderID
 			case statusINVALID:
 				if err := s.repo.SaveStatusInvalid(ctx, orderID); err != nil {
 					logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
-					//s.ordersCh <- orderID
+					s.badOrdersCh <- orderID
 				}
 			case statusPROCESSING:
 				if err := s.repo.SaveStatusProccessing(ctx, orderID); err != nil {
 					logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
 				}
-				//s.ordersCh <- orderID
+				s.badOrdersCh <- orderID
 			case statusPROCESSED:
 				if err := s.repo.AccruePoints(ctx, orderID, points); err != nil {
 					logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
 					//orderIDsForRepeat = append(orderIDsForRepeat, orderID)
-					//s.ordersCh <- orderID
+					s.badOrdersCh <- orderID
 				}
 			}
-		case <-ticker.C:
-			//s.ordersCh <- orderID
 		}
 	}
-	// for orderID := range orderIDsForRepeat{
-	// 	s.ordersCh <- orderID
-	// }
 	//<-s.ordersCh
+}
+
+func (s *Service) HandleBadOrdersQueue() {
+	for {
+		select {
+		case badOrderID := <-s.badOrdersCh:
+			s.ordersCh <- badOrderID
+		}
+	}
 }
 
 func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, error) {
 	//return 0, "", nil
 	client := &http.Client{}
 	url := "http://" + serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
+	//url := serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
 	request, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		panic(err)
+		logger.Log.Fatal("accural request init", zap.String("error", err.Error()))
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		panic(err)
+		logger.Log.Fatal("accural request do", zap.String("error", err.Error()))
 	}
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusTooManyRequests {
