@@ -98,6 +98,11 @@ func (s *Service) HandleOrderQueue(serverAddress string) {
 			if err == ErrTooManyRequests {
 				time.Sleep(3 * time.Second)
 				s.badOrdersCh <- orderID
+				continue
+			}
+			if err == ErrOrderNotRegistered {
+				s.badOrdersCh <- orderID
+				continue
 			}
 			if err != nil {
 				logger.Log.Error("accural api handle", zap.String("error", err.Error()))

@@ -9,9 +9,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nasik90/gophermart/internal/app/logger"
 	middleware "github.com/nasik90/gophermart/internal/app/middlewares"
 	"github.com/nasik90/gophermart/internal/app/service"
 	"github.com/nasik90/gophermart/internal/app/storage"
+	"go.uber.org/zap"
 )
 
 type Service interface {
@@ -137,6 +139,7 @@ func (h *Handler) GetOrderList() http.HandlerFunc {
 		login := middleware.LoginFromContext(ctx)
 		orderList, err := h.service.GetOrderList(ctx, login)
 		if err != nil {
+			logger.Log.Error("get order list", zap.String("error", err.Error()))
 			http.Error(res, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -145,6 +148,7 @@ func (h *Handler) GetOrderList() http.HandlerFunc {
 		if len(*orderList) != 0 {
 			orderListJSON, err = json.Marshal(orderList)
 			if err != nil {
+				logger.Log.Error("marshalling order list", zap.String("error", err.Error()))
 				http.Error(res, err.Error(), http.StatusInternalServerError)
 				return
 			}
