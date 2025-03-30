@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/nasik90/gophermart/internal/app/logger"
 	"github.com/nasik90/gophermart/internal/app/storage"
@@ -23,10 +24,13 @@ type Repository interface {
 	AccruePoints(ctx context.Context, OrderID int, points float64) error
 	GetUserBalance(ctx context.Context, login string) (*storage.UserBalance, error)
 	GetWithdrawals(ctx context.Context, login string) (*[]storage.Withdrawals, error)
+	SaveStatusInvalid(ctx context.Context, orderID int) error
+	SaveStatusProccessing(ctx context.Context, orderID int) error
 }
 
 var (
-	ErrOrderFormat = errors.New("order format is not valid")
+	ErrOrderFormat     = errors.New("order format is not valid")
+	ErrTooManyRequests = errors.New("too many requests")
 )
 
 type Service struct {
@@ -71,23 +75,59 @@ func (s *Service) WithdrawPoints(ctx context.Context, login string, OrderID int,
 	return s.repo.WithdrawPoints(ctx, login, OrderID, points)
 }
 
-func (s *Service) loadOrderIDInOrderQueue(OrderID int) {
-	s.ordersCh <- OrderID
+func (s *Service) loadOrderIDInOrderQueue(orderID int) {
+	s.ordersCh <- orderID
 }
 
 func (s *Service) HandleOrderQueue(serverAddress string) {
 	const (
-		statusPROCESSED = "PROCESSED"
+		statusREGISTERED = "REGISTERED"
+		statusINVALID    = "INVALID"
+		statusPROCESSING = "PROCESSING"
+		statusPROCESSED  = "PROCESSED"
 	)
-	for orderID := range s.ordersCh {
-		points, status, err := GetAccrualByOrderID(orderID, serverAddress)
-		if err != nil {
-			logger.Log.Error("accural api handle", zap.String("error", err.Error()))
-		}
-		if status == statusPROCESSED {
-			s.repo.AccruePoints(context.Background(), orderID, points)
+	ticker := time.NewTicker(5 * time.Second)
+	ctx := context.Background()
+	//orderIDsForRepeat := []int
+	for {
+		orderID := 0
+		select {
+		case orderID = <-s.ordersCh:
+			points, status, err := GetAccrualByOrderID(orderID, serverAddress)
+			if err == ErrTooManyRequests {
+				time.Sleep(3 * time.Second)
+				//s.ordersCh <- orderID
+			}
+			if err != nil {
+				logger.Log.Error("accural api handle", zap.String("error", err.Error()))
+			}
+			switch status {
+			case statusREGISTERED:
+				//s.ordersCh <- orderID
+			case statusINVALID:
+				if err := s.repo.SaveStatusInvalid(ctx, orderID); err != nil {
+					logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
+					//s.ordersCh <- orderID
+				}
+			case statusPROCESSING:
+				if err := s.repo.SaveStatusProccessing(ctx, orderID); err != nil {
+					logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
+				}
+				//s.ordersCh <- orderID
+			case statusPROCESSED:
+				if err := s.repo.AccruePoints(ctx, orderID, points); err != nil {
+					logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
+					//orderIDsForRepeat = append(orderIDsForRepeat, orderID)
+					//s.ordersCh <- orderID
+				}
+			}
+		case <-ticker.C:
+			//s.ordersCh <- orderID
 		}
 	}
+	// for orderID := range orderIDsForRepeat{
+	// 	s.ordersCh <- orderID
+	// }
 	//<-s.ordersCh
 }
 
@@ -104,6 +144,9 @@ func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, er
 		panic(err)
 	}
 	defer response.Body.Close()
+	if response.StatusCode == http.StatusTooManyRequests {
+		return 0.0, "", ErrTooManyRequests
+	}
 	type orderDataType struct {
 		Order   string  `json:"order"`
 		Status  string  `json:"status"`

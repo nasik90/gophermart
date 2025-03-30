@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
@@ -213,8 +214,18 @@ func (h *Handler) GetAccrual() http.HandlerFunc {
 		pathSlice := strings.Split(req.URL.Path, "/")
 		orderID := pathSlice[len(pathSlice)-1]
 		result.Order = orderID
-		result.Status = "PROCESSED"
-		result.Accrual = 500.00
+		statusID := rand.Intn(4)
+		statusName := "PROCESSED"
+		switch statusID {
+		case 1:
+			statusName = "REGISTERED"
+		case 2:
+			statusName = "INVALID"
+		case 3:
+			statusName = "PROCESSING"
+		}
+		result.Status = statusName
+		result.Accrual = float64(rand.Intn(5000))
 		var orderListJSON []byte
 		orderListJSON, err := json.Marshal(result)
 		if err != nil {
