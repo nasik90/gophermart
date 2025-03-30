@@ -95,62 +95,54 @@ func (s *Service) HandleOrderQueue(serverAddress string) {
 		statusPROCESSED  = "PROCESSED"
 	)
 	ctx := context.Background()
-	//orderIDsForRepeat := []int
 	for {
-		orderID := 0
-		select {
-		case orderID = <-s.ordersCh:
-			points, status, err := GetAccrualByOrderID(orderID, serverAddress)
-			if err == ErrTooManyRequests {
-				time.Sleep(3 * time.Second)
+		orderID := <-s.ordersCh
+		points, status, err := GetAccrualByOrderID(orderID, serverAddress)
+		if err == ErrTooManyRequests {
+			time.Sleep(3 * time.Second)
+			s.badOrdersCh <- orderID
+			continue
+		}
+		if err == ErrOrderNotRegistered {
+			s.badOrdersCh <- orderID
+			continue
+		}
+		if err != nil {
+			logger.Log.Error("accural api handle", zap.String("error", err.Error()))
+		}
+		switch status {
+		case statusREGISTERED:
+			s.badOrdersCh <- orderID
+		case statusINVALID:
+			if err := s.repo.SaveStatusInvalid(ctx, orderID); err != nil {
+				logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
 				s.badOrdersCh <- orderID
-				continue
 			}
-			if err == ErrOrderNotRegistered {
-				s.badOrdersCh <- orderID
-				continue
+		case statusPROCESSING:
+			if err := s.repo.SaveStatusProccessing(ctx, orderID); err != nil {
+				logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
 			}
-			if err != nil {
-				logger.Log.Error("accural api handle", zap.String("error", err.Error()))
-			}
-			switch status {
-			case statusREGISTERED:
+			s.badOrdersCh <- orderID
+		case statusPROCESSED:
+			if err := s.repo.AccruePoints(ctx, orderID, points); err != nil {
+				logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
 				s.badOrdersCh <- orderID
-			case statusINVALID:
-				if err := s.repo.SaveStatusInvalid(ctx, orderID); err != nil {
-					logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
-					s.badOrdersCh <- orderID
-				}
-			case statusPROCESSING:
-				if err := s.repo.SaveStatusProccessing(ctx, orderID); err != nil {
-					logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
-				}
-				s.badOrdersCh <- orderID
-			case statusPROCESSED:
-				if err := s.repo.AccruePoints(ctx, orderID, points); err != nil {
-					logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
-					//orderIDsForRepeat = append(orderIDsForRepeat, orderID)
-					s.badOrdersCh <- orderID
-				}
 			}
 		}
 	}
-	//<-s.ordersCh
 }
 
 func (s *Service) HandleBadOrdersQueue() {
 	for {
-		select {
-		case badOrderID := <-s.badOrdersCh:
-			s.ordersCh <- badOrderID
-		}
+		badOrderID := <-s.badOrdersCh
+		s.ordersCh <- badOrderID
 	}
 }
 
 func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, error) {
 	start := time.Now()
 	client := &http.Client{}
-	// TODO: как сделать красиво?
+	// Как сделать красиво?
 	serverPrefix := ""
 	if !strings.Contains(serverAddress, "http") {
 		serverPrefix = "http://"
