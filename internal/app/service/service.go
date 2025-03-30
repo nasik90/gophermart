@@ -9,6 +9,7 @@ import (
 
 	"github.com/nasik90/gophermart/internal/app/logger"
 	"github.com/nasik90/gophermart/internal/app/storage"
+	"github.com/phedde/luhn-algorithm"
 	"go.uber.org/zap"
 )
 
@@ -45,10 +46,10 @@ func (s *Service) UserIsValid(ctx context.Context, login, password string) (bool
 }
 
 func (s *Service) LoadOrder(ctx context.Context, OrderID int, login string) error {
-	// isValid := luhn.IsValid(int64(OrderID))
-	// if !isValid {
-	// 	return ErrOrderFormat
-	// }
+	isValid := luhn.IsValid(int64(OrderID))
+	if !isValid {
+		return ErrOrderFormat
+	}
 	if err := s.repo.SaveNewOrder(ctx, OrderID, login); err != nil {
 		return err
 	}
@@ -62,10 +63,10 @@ func (s *Service) GetOrderList(ctx context.Context, login string) (*[]storage.Or
 
 // списание баллов
 func (s *Service) WithdrawPoints(ctx context.Context, login string, OrderID int, points float64) error {
-	// isValid := luhn.IsValid(int64(OrderID))
-	// if !isValid {
-	// 	return ErrOrderFormat
-	// }
+	isValid := luhn.IsValid(int64(OrderID))
+	if !isValid {
+		return ErrOrderFormat
+	}
 	return s.repo.WithdrawPoints(ctx, login, OrderID, points)
 }
 
