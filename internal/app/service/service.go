@@ -29,8 +29,9 @@ type Repository interface {
 }
 
 var (
-	ErrOrderFormat     = errors.New("order format is not valid")
-	ErrTooManyRequests = errors.New("too many requests")
+	ErrOrderFormat        = errors.New("order format is not valid")
+	ErrTooManyRequests    = errors.New("too many requests")
+	ErrOrderNotRegistered = errors.New("order not registered")
 )
 
 type Service struct {
@@ -160,6 +161,9 @@ func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, er
 	)
 	if response.StatusCode == http.StatusTooManyRequests {
 		return 0.0, "", ErrTooManyRequests
+	}
+	if response.StatusCode == http.StatusNoContent {
+		return 0.0, "", ErrOrderNotRegistered
 	}
 	type orderDataType struct {
 		Order   string  `json:"order"`
