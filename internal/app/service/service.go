@@ -11,6 +11,7 @@ import (
 
 	"github.com/nasik90/gophermart/internal/app/logger"
 	"github.com/nasik90/gophermart/internal/app/storage"
+	"github.com/phedde/luhn-algorithm"
 	"go.uber.org/zap"
 )
 
@@ -51,10 +52,10 @@ func (s *Service) UserIsValid(ctx context.Context, login, password string) (bool
 }
 
 func (s *Service) LoadOrder(ctx context.Context, OrderID int, login string) error {
-	// isValid := luhn.IsValid(int64(OrderID))
-	// if !isValid {
-	// 	return ErrOrderFormat
-	// }
+	isValid := luhn.IsValid(int64(OrderID))
+	if !isValid {
+		return ErrOrderFormat
+	}
 	if err := s.repo.SaveNewOrder(ctx, OrderID, login); err != nil {
 		return err
 	}
@@ -68,10 +69,10 @@ func (s *Service) GetOrderList(ctx context.Context, login string) (*[]storage.Or
 
 // списание баллов
 func (s *Service) WithdrawPoints(ctx context.Context, login string, OrderID int, points float64) error {
-	// isValid := luhn.IsValid(int64(OrderID))
-	// if !isValid {
-	// 	return ErrOrderFormat
-	// }
+	isValid := luhn.IsValid(int64(OrderID))
+	if !isValid {
+		return ErrOrderFormat
+	}
 	return s.repo.WithdrawPoints(ctx, login, OrderID, points)
 }
 
@@ -136,9 +137,10 @@ func (s *Service) HandleBadOrdersQueue() {
 
 func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, error) {
 	//return 0, "", nil
+	start := time.Now()
 	client := &http.Client{}
-	//url := "http://" + serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
-	url := ":" + serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
+	url := "http://" + serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
+	//url := serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
 	logger.Log.Info("accural handle", zap.String("api url", url))
 	request, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -149,6 +151,13 @@ func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, er
 		logger.Log.Fatal("accural request do", zap.String("error", err.Error()))
 	}
 	defer response.Body.Close()
+	duration := time.Since(start)
+	logger.Log.Sugar().Infoln(
+		"uri", request.URL.Path,
+		"method", request.Method,
+		"status", response.StatusCode,
+		"duration", duration,
+	)
 	if response.StatusCode == http.StatusTooManyRequests {
 		return 0.0, "", ErrTooManyRequests
 	}
