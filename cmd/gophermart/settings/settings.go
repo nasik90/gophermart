@@ -6,9 +6,10 @@ import (
 )
 
 type Options struct {
-	ServerAddress string
-	LogLevel      string
-	DatabaseURI   string
+	ServerAddress        string
+	LogLevel             string
+	DatabaseURI          string
+	AccrualServerAddress string
 }
 
 func ParseFlags(o *Options) {
@@ -16,6 +17,7 @@ func ParseFlags(o *Options) {
 	flag.StringVar(&o.LogLevel, "l", "debug", "log level")
 	flag.StringVar(&o.DatabaseURI, "d", "host=localhost user=postgres password=xxxx dbname=gophermart sslmode=disable", "database connection string")
 	//flag.StringVar(&o.DatabaseURI, "d", "", "database connection string")
+	flag.StringVar(&o.AccrualServerAddress, "a", "localhost:8181", "accrual address and port to run server")
 	flag.Parse()
 
 	if serverAddress := os.Getenv("RUN_ADDRESS"); serverAddress != "" {
@@ -26,5 +28,8 @@ func ParseFlags(o *Options) {
 	}
 	if databaseURI := os.Getenv("DATABASE_URI"); databaseURI != "" {
 		o.DatabaseURI = databaseURI
+	}
+	if accrualServerAddress := os.Getenv("ACCRUAL_SYSTEM_ADDRESS"); accrualServerAddress != "" {
+		o.AccrualServerAddress = accrualServerAddress
 	}
 }

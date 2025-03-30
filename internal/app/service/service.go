@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -46,10 +47,10 @@ func (s *Service) UserIsValid(ctx context.Context, login, password string) (bool
 }
 
 func (s *Service) LoadOrder(ctx context.Context, OrderID int, login string) error {
-	isValid := luhn.IsValid(int64(OrderID))
-	if !isValid {
-		return ErrOrderFormat
-	}
+	// isValid := luhn.IsValid(int64(OrderID))
+	// if !isValid {
+	// 	return ErrOrderFormat
+	// }
 	if err := s.repo.SaveNewOrder(ctx, OrderID, login); err != nil {
 		return err
 	}
@@ -91,6 +92,7 @@ func (s *Service) HandleOrderQueue(serverAddress string) {
 }
 
 func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, error) {
+	//return 0, "", nil
 	client := &http.Client{}
 	url := "http://" + serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
 	request, err := http.NewRequest(http.MethodGet, url, nil)
@@ -109,7 +111,12 @@ func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, er
 	}
 	var orderData orderDataType
 	if err := json.NewDecoder(response.Body).Decode(&orderData); err != nil {
-		return 0, "", err
+		b, errReadAll := io.ReadAll(response.Body)
+		if errReadAll != nil {
+			logger.Log.Fatal("fatal accural handle body read", zap.String("error", err.Error()))
+		}
+		logger.Log.Error("accural handle response", zap.String("response body", string(b)))
+		return 0.0, "", err
 	}
 	return orderData.Accrual, orderData.Status, nil
 }

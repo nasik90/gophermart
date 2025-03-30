@@ -37,7 +37,7 @@ func main() {
 	}
 	s := service.NewService(repo)
 	h := handler.NewHandler(s)
-	go s.HandleOrderQueue(options.ServerAddress)
+	go s.HandleOrderQueue(options.AccrualServerAddress)
 
 	server := server.NewServer(h, options.ServerAddress)
 	sigs := make(chan os.Signal, 1)
