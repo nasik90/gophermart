@@ -137,8 +137,8 @@ func (s *Service) HandleBadOrdersQueue() {
 func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, error) {
 	//return 0, "", nil
 	client := &http.Client{}
-	url := "http://" + serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
-	//url := serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
+	//url := "http://" + serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
+	url := serverAddress + "/api/accrual/" + strconv.Itoa(orderID)
 	request, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		logger.Log.Fatal("accural request init", zap.String("error", err.Error()))
