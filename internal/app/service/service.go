@@ -100,9 +100,9 @@ func (s *Service) HandleOrderQueue(serverAddress string) {
 			return
 		}
 		for orderID := range orderIDs {
-			if orderID == 0 {
-				continue
-			}
+			// if orderID == 0 {
+			// 	continue
+			// }
 			accrualData, retryAfter, err := GetAccrualByOrderID(orderID, serverAddress)
 			if errors.Is(err, ErrTooManyRequests) {
 				timeToSleep := 5
