@@ -153,6 +153,7 @@ func GetAccrualByOrderID(orderID int, serverAddress string) (orderDataType, int,
 		serverPrefix = "http://"
 	}
 	url := serverPrefix + serverAddress + "/api/orders/" + strconv.Itoa(orderID)
+	logger.Log.Info("accural api handle", zap.String("api URL", url))
 	request, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return orderData, 0, err

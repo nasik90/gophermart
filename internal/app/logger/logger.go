@@ -21,8 +21,10 @@ func Initialize(level string) error {
 	}
 	// создаём новую конфигурацию логера
 	cfg := zap.NewProductionConfig()
+	//cfg := zap.NewProductionEncoderConfig()
 	// устанавливаем уровень
 	cfg.Level = lvl
+	//cfg.EncodeTime = zapcore.ISO8601TimeEncoder
 	// создаём логер на основе конфигурации
 	zl, err := cfg.Build()
 	if err != nil {
