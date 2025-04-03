@@ -60,6 +60,7 @@ func TestHandler_RegisterNewUser(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.RegisterNewUser()(w, request)
 			res := w.Result()
+			res.Body.Close()
 			assert.Equal(t, tt.responseCode, res.StatusCode)
 		})
 	}
@@ -100,6 +101,7 @@ func TestHandler_LoginUser(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.LoginUser()(w, request)
 			res := w.Result()
+			res.Body.Close()
 			assert.Equal(t, tt.responseCode, res.StatusCode)
 		})
 	}
@@ -148,6 +150,7 @@ func TestHandler_LoadOrder(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.LoadOrder()(w, request)
 			res := w.Result()
+			res.Body.Close()
 			assert.Equal(t, tt.responseCode, res.StatusCode)
 
 			if res.StatusCode == http.StatusUnprocessableEntity {
@@ -189,8 +192,8 @@ func TestHandler_GetOrderList(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.GetOrderList()(w, request)
 			res := w.Result()
+			res.Body.Close()
 			assert.Equal(t, tt.responseCode, res.StatusCode)
-
 		})
 	}
 }
@@ -245,6 +248,7 @@ func TestHandler_WithdrawPoints(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.WithdrawPoints()(w, request)
 			res := w.Result()
+			res.Body.Close()
 			assert.Equal(t, tt.responseCode, res.StatusCode)
 		})
 	}
@@ -281,8 +285,8 @@ func TestHandler_GetUserBalance(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.GetUserBalance()(w, request)
 			res := w.Result()
+			res.Body.Close()
 			assert.Equal(t, tt.responseCode, res.StatusCode)
-
 		})
 	}
 }
@@ -318,8 +322,8 @@ func TestHandler_GetWithdrawals(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.GetWithdrawals()(w, request)
 			res := w.Result()
+			res.Body.Close()
 			assert.Equal(t, tt.responseCode, res.StatusCode)
-
 		})
 	}
 }
