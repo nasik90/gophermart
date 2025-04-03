@@ -3,6 +3,10 @@ package settings
 import (
 	"flag"
 	"os"
+	"strconv"
+
+	"github.com/nasik90/gophermart/internal/app/logger"
+	"go.uber.org/zap"
 )
 
 type Options struct {
@@ -35,10 +39,16 @@ func ParseFlags(o *Options) {
 		o.AccrualServerAddress = accrualServerAddress
 	}
 	if checkOrderID := os.Getenv("CHECK_ORDERID"); checkOrderID != "" {
-		o.CheckOrderID = false
-		if checkOrderID == "true" {
-			o.CheckOrderID = true
+		val, err := strconv.ParseBool(checkOrderID)
+		if err != nil {
+			logger.Log.Fatal("CHECK_ORDERID parsing", zap.String("error", err.Error()))
 		}
-
+		o.CheckOrderID = val
 	}
+}
+
+func GetOptions() *Options {
+	options := new(Options)
+	ParseFlags(options)
+	return options
 }

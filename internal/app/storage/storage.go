@@ -29,3 +29,10 @@ type Withdrawals struct {
 	Sum         float64   `json:"sum"`
 	ProcessedAt time.Time `json:"processed_at"`
 }
+
+const (
+	StatusNEW        = 1
+	StatusPROCESSING = 2
+	StatusINVALID    = 3
+	StatusPROCESSED  = 4
+)

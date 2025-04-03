@@ -20,7 +20,7 @@ type Claims struct {
 	UserID string
 }
 
-type loginContextKey struct{}
+type LoginContextKey struct{}
 
 func SetAuthCookie(login string, res http.ResponseWriter) error {
 	JWT, err := buildJWTString(login)
@@ -70,7 +70,7 @@ func Auth(h http.HandlerFunc) http.HandlerFunc {
 			res.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		ctx := context.WithValue(req.Context(), loginContextKey{}, login)
+		ctx := context.WithValue(req.Context(), LoginContextKey{}, login)
 		req = req.WithContext(ctx)
 		h.ServeHTTP(res, req)
 	}
@@ -97,5 +97,5 @@ func getLogin(tokenString string) (string, error) {
 }
 
 func LoginFromContext(ctx context.Context) string {
-	return ctx.Value(loginContextKey{}).(string)
+	return ctx.Value(LoginContextKey{}).(string)
 }

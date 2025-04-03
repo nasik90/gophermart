@@ -20,8 +20,7 @@ import (
 )
 
 func main() {
-	options := new(settings.Options)
-	settings.ParseFlags(options)
+	options := settings.GetOptions()
 
 	if err := logger.Initialize(options.LogLevel); err != nil {
 		panic(err)
@@ -38,7 +37,6 @@ func main() {
 	s := service.NewService(repo, options.CheckOrderID)
 	h := handler.NewHandler(s)
 	go s.HandleOrderQueue(options.AccrualServerAddress)
-	go s.HandleBadOrdersQueue()
 
 	server := server.NewServer(h, options.ServerAddress)
 	sigs := make(chan os.Signal, 1)

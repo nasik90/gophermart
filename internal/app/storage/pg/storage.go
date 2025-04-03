@@ -11,13 +11,6 @@ import (
 	"github.com/nasik90/gophermart/internal/app/storage"
 )
 
-const (
-	statusNEW        = 1
-	statusPROCESSING = 2
-	statusINVALID    = 3
-	statusPROCESSED  = 4
-)
-
 type Store struct {
 	conn *sql.DB
 }
@@ -45,8 +38,7 @@ func (s Store) Bootstrap(ctx context.Context) error {
 	// в случае неуспешного коммита все изменения транзакции будут отменены
 	defer tx.Rollback()
 
-	// TODO изучить как лучше хранить пароли
-	// TODO создать индексы
+	// Как лучше хранить пароли?
 	// таблица пользователей
 	if _, err := tx.ExecContext(ctx, `
 	    CREATE TABLE IF NOT EXISTS users (
@@ -92,7 +84,10 @@ func (s Store) Bootstrap(ctx context.Context) error {
 
 	// заполнение таблицы видов значений статусов заказа
 	if _, err := tx.ExecContext(ctx, `INSERT INTO status_values_kinds (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8) ON CONFLICT DO NOTHING`,
-		statusNEW, "NEW", statusPROCESSING, "PROCESSING", statusINVALID, "INVALID", statusPROCESSED, "PROCESSED"); err != nil {
+		storage.StatusNEW, "NEW",
+		storage.StatusPROCESSING, "PROCESSING",
+		storage.StatusINVALID, "INVALID",
+		storage.StatusPROCESSED, "PROCESSED"); err != nil {
 		return err
 	}
 
@@ -115,10 +110,15 @@ func (s Store) Bootstrap(ctx context.Context) error {
 		(
 			order_id bigint NOT NULL,
 			status_id int NOT NULL,
-			date_time timestamp NOT NULL,
-			CONSTRAINT unique_order_id UNIQUE (order_id)
+			date_time timestamp NOT NULL
 		)
 	`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS current_statuses_order_id_uidx ON current_statuses (order_id)`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS current_statuses_status_id_idx ON current_statuses (status_id)`); err != nil {
 		return err
 	}
 
@@ -247,12 +247,10 @@ func createOrderWithStatusNew(ctx context.Context, tx *sql.Tx, id int, userID in
 		return err
 	}
 
-	return updateOrderStatus(ctx, tx, id, statusNEW, uploadedAt)
+	return updateOrderStatus(ctx, tx, id, storage.StatusNEW, uploadedAt)
 }
 
 func updateOrderStatus(ctx context.Context, tx *sql.Tx, OrderID int, statusID int, statusTime time.Time) error {
-	//Переделать установку статуса через триггеры в постгри https://postgrespro.ru/docs/postgresql/9.6/plpgsql-trigger
-	//В триггере должно всегда устанавливаться текущее время при инсерте и автоматом обновляться запись в current_statuses
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO history_statuses (date_time, order_id, status_id) VALUES ($1, $2, $3)`,
 		statusTime, OrderID, statusID); err != nil {
@@ -320,17 +318,6 @@ func (s *Store) GetOrderList(ctx context.Context, login string) (*[]storage.Orde
 			ON orders.id = orders_points.order_id
 		WHERE users.login = $1
 		`
-
-	// queryText :=
-	// 	`SELECT orders.id
-	// 		,'' as status
-	// 		,orders.uploaded_at
-	// 		,0 as accrual
-	// 	FROM orders
-	// 		INNER JOIN users
-	// 		ON orders.user_id = users.id
-	// 	WHERE users.login = $1
-	// 	`
 	rows, err := s.conn.QueryContext(ctx, queryText, login)
 	if err != nil {
 		return nil, err
@@ -348,7 +335,6 @@ func (s *Store) GetOrderList(ctx context.Context, login string) (*[]storage.Orde
 	}
 
 	return &result, rows.Close()
-	//return result, nil
 }
 
 // списание баллов
@@ -364,44 +350,35 @@ func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, p
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, `
-		SELECT user_id 
+	rows, err := tx.QueryContext(ctx, `
+		SELECT balance 
 		FROM users_current_points
 		WHERE user_id = $1 FOR UPDATE
-	`, userID); err != nil {
-		return err
-	}
-
-	res, err := tx.ExecContext(ctx, `
-		UPDATE users_current_points SET points_out = points_out + $1, balance = balance - $1  WHERE user_id = $2 
-	`, points, userID)
+	`, userID)
 	if err != nil {
 		return err
 	}
-
-	rowsAffected, err := res.RowsAffected()
-	if err != nil {
+	defer rows.Close()
+	balance := 0.0
+	for rows.Next() {
+		if err := rows.Scan(&balance); err != nil {
+			return err
+		}
+	}
+	if err := rows.Err(); err != nil {
 		return err
 	}
-	// Если ничего не обновили, значит нет баллов у покупателя
-	if rowsAffected == 0 {
+
+	if balance < points {
 		return storage.ErrOutOfBalance
-	} else {
-		//Проверяем не ушли ли в минус
-		rows, err := tx.QueryContext(ctx, `
-			SELECT balance FROM users_current_points WHERE user_id = $1 and balance < 0
-		`, userID)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			return storage.ErrOutOfBalance
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
 	}
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE users_current_points SET points_out = points_out + $1, balance = balance - $1  WHERE user_id = $2 
+	`, points, userID); err != nil {
+		return err
+	}
+
 	// Создем заказ
 	err = createOrderWithStatusNew(ctx, tx, OrderID, userID)
 	if err != nil {
@@ -435,32 +412,12 @@ func (s *Store) AccruePoints(ctx context.Context, orderID int, points float64) e
 	defer tx.Rollback()
 
 	if _, err := tx.ExecContext(ctx, `
-		SELECT user_id 
-		FROM users_current_points
-		WHERE user_id = $1 FOR UPDATE
-	`, userID); err != nil {
+		INSERT INTO users_current_points (user_id, points_in, points_out, balance) VALUES ($1, $2, $3, $4) 
+			ON CONFLICT ON CONSTRAINT users_current_points_unique_order_id DO 
+			UPDATE SET points_in = users_current_points.points_in + $2, balance = users_current_points.balance + $2  
+			WHERE users_current_points.user_id = $1 
+	`, userID, points, 0, points); err != nil {
 		return err
-	}
-
-	res, err := tx.ExecContext(ctx, `
-		UPDATE users_current_points SET points_in = points_in + $1, balance = balance + $1  WHERE user_id = $2 
-	`, points, userID)
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	// Если ничего не обновили, то добавляем баллы
-	if rowsAffected == 0 {
-		_, err := tx.ExecContext(ctx, `
-			INSERT INTO users_current_points (user_id, points_in, points_out, balance) VALUES ($1, $2, $3, $4) 
-		`, userID, points, 0, points)
-		if err != nil {
-			return err
-		}
 	}
 
 	// Пишем в таблицу orders_points
@@ -471,7 +428,7 @@ func (s *Store) AccruePoints(ctx context.Context, orderID int, points float64) e
 		return err
 	}
 
-	if err := updateOrderStatus(ctx, tx, orderID, statusPROCESSED, curTime); err != nil {
+	if err := updateOrderStatus(ctx, tx, orderID, storage.StatusPROCESSED, curTime); err != nil {
 		return err
 	}
 
@@ -538,26 +495,31 @@ func (s *Store) GetWithdrawals(ctx context.Context, login string) (*[]storage.Wi
 	return &result, rows.Close()
 }
 
-func (s *Store) SaveStatusInvalid(ctx context.Context, orderID int) error {
+func (s *Store) SaveStatus(ctx context.Context, orderID int, statusID int) error {
 	tx, err := s.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if err := updateOrderStatus(ctx, tx, orderID, statusINVALID, time.Now()); err != nil {
+	if err := updateOrderStatus(ctx, tx, orderID, statusID, time.Now()); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-func (s *Store) SaveStatusProccessing(ctx context.Context, orderID int) error {
-	tx, err := s.conn.BeginTx(ctx, nil)
+func (s *Store) NewAndProcessingOrders(ctx context.Context) ([]int, error) {
+	var result []int
+	rows, err := s.conn.QueryContext(ctx, ` SELECT order_id FROM current_statuses WHERE status_id IN ($1, $2) ORDER BY date_time`, storage.StatusNEW, storage.StatusPROCESSING)
 	if err != nil {
-		return err
+		return result, err
 	}
-	defer tx.Rollback()
-	if err := updateOrderStatus(ctx, tx, orderID, statusPROCESSING, time.Now()); err != nil {
-		return err
+	for rows.Next() {
+		var orderID int
+		rows.Scan(&orderID)
+		result = append(result, orderID)
 	}
-	return tx.Commit()
+	if err := rows.Err(); err != nil {
+		return result, err
+	}
+	return result, rows.Close()
 }

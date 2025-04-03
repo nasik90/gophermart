@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -47,7 +48,7 @@ func (h *Handler) RegisterNewUser() http.HandlerFunc {
 		}
 		if err := h.service.RegisterNewUser(ctx, input.Login, input.Password); err != nil {
 			status := http.StatusInternalServerError
-			if err == storage.ErrUserNotUnique {
+			if errors.Is(err, storage.ErrUserNotUnique) {
 				status = http.StatusConflict
 			}
 			http.Error(res, err.Error(), status)
@@ -115,13 +116,13 @@ func (h *Handler) LoadOrder() http.HandlerFunc {
 		err = h.service.LoadOrder(ctx, orderNumberInt, login)
 		resStatus := http.StatusAccepted
 		if err != nil {
-			if err == storage.ErrOrderLoadedByAnotherUser {
+			if errors.Is(err, storage.ErrOrderLoadedByAnotherUser) {
 				http.Error(res, err.Error(), http.StatusConflict)
 				return
-			} else if err == service.ErrOrderFormat {
+			} else if errors.Is(err, service.ErrOrderFormat) {
 				http.Error(res, err.Error(), http.StatusUnprocessableEntity)
 				return
-			} else if err == storage.ErrOrderIDNotUnique {
+			} else if errors.Is(err, storage.ErrOrderIDNotUnique) {
 				resStatus = http.StatusOK
 			} else {
 				http.Error(res, err.Error(), http.StatusInternalServerError)
@@ -145,7 +146,7 @@ func (h *Handler) GetOrderList() http.HandlerFunc {
 		}
 		resStatus := http.StatusNoContent
 		var orderListJSON []byte
-		if len(*orderList) != 0 {
+		if orderList != nil && len(*orderList) != 0 {
 			orderListJSON, err = json.Marshal(orderList)
 			if err != nil {
 				logger.Log.Error("marshalling order list", zap.String("error", err.Error()))
@@ -157,9 +158,6 @@ func (h *Handler) GetOrderList() http.HandlerFunc {
 		res.Header().Set("content-type", "application/json")
 		res.WriteHeader(resStatus)
 		res.Write(orderListJSON)
-
-		// res.Header().Set("content-type", "application/json")
-		// res.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -184,16 +182,16 @@ func (h *Handler) WithdrawPoints() http.HandlerFunc {
 		err = h.service.WithdrawPoints(ctx, login, orderNumberInt, input.Sum)
 		resStatus := http.StatusOK
 		if err != nil {
-			if err == storage.ErrOrderLoadedByAnotherUser {
+			if errors.Is(err, storage.ErrOrderLoadedByAnotherUser) {
 				http.Error(res, err.Error(), http.StatusConflict)
 				return
-			} else if err == service.ErrOrderFormat {
+			} else if errors.Is(err, service.ErrOrderFormat) {
 				http.Error(res, err.Error(), http.StatusUnprocessableEntity)
 				return
-			} else if err == storage.ErrOrderIDNotUnique {
+			} else if errors.Is(err, storage.ErrOrderIDNotUnique) {
 				http.Error(res, err.Error(), http.StatusConflict)
 				return
-			} else if err == storage.ErrOutOfBalance {
+			} else if errors.Is(err, storage.ErrOutOfBalance) {
 				http.Error(res, err.Error(), http.StatusPaymentRequired)
 				return
 			} else {
@@ -275,7 +273,7 @@ func (h *Handler) GetWithdrawals() http.HandlerFunc {
 		}
 		resStatus := http.StatusNoContent
 		var orderListJSON []byte
-		if len(*orderList) != 0 {
+		if orderList != nil && len(*orderList) != 0 {
 			orderListJSON, err = json.Marshal(orderList)
 			if err != nil {
 				http.Error(res, err.Error(), http.StatusInternalServerError)
@@ -286,8 +284,5 @@ func (h *Handler) GetWithdrawals() http.HandlerFunc {
 		res.Header().Set("content-type", "application/json")
 		res.WriteHeader(resStatus)
 		res.Write(orderListJSON)
-
-		// res.Header().Set("content-type", "application/json")
-		// res.WriteHeader(http.StatusOK)
 	}
 }

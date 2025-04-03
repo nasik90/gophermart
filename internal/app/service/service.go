@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -25,8 +24,8 @@ type Repository interface {
 	AccruePoints(ctx context.Context, OrderID int, points float64) error
 	GetUserBalance(ctx context.Context, login string) (*storage.UserBalance, error)
 	GetWithdrawals(ctx context.Context, login string) (*[]storage.Withdrawals, error)
-	SaveStatusInvalid(ctx context.Context, orderID int) error
-	SaveStatusProccessing(ctx context.Context, orderID int) error
+	SaveStatus(ctx context.Context, orderID, statusID int) error
+	NewAndProcessingOrders(ctx context.Context) ([]int, error)
 }
 
 var (
@@ -38,12 +37,11 @@ var (
 type Service struct {
 	repo         Repository
 	ordersCh     chan int
-	badOrdersCh  chan int
 	checkOrderID bool
 }
 
 func NewService(store Repository, checkOrderID bool) *Service {
-	return &Service{repo: store, ordersCh: make(chan int), badOrdersCh: make(chan int), checkOrderID: checkOrderID}
+	return &Service{repo: store, ordersCh: make(chan int), checkOrderID: checkOrderID}
 }
 
 func (s *Service) RegisterNewUser(ctx context.Context, login, password string) error {
@@ -96,51 +94,54 @@ func (s *Service) HandleOrderQueue(serverAddress string) {
 	)
 	ctx := context.Background()
 	for {
-		orderID := <-s.ordersCh
-		points, status, err := GetAccrualByOrderID(orderID, serverAddress)
-		if err == ErrTooManyRequests {
-			time.Sleep(3 * time.Second)
-			s.badOrdersCh <- orderID
-			continue
-		}
-		if err == ErrOrderNotRegistered {
-			s.badOrdersCh <- orderID
-			continue
-		}
+		orderIDs, err := s.repo.NewAndProcessingOrders(ctx)
 		if err != nil {
-			logger.Log.Error("accural api handle", zap.String("error", err.Error()))
+			logger.Log.Error("select orders for processing in accrual service", zap.String("error", err.Error()))
 		}
-		switch status {
-		case statusREGISTERED:
-			s.badOrdersCh <- orderID
-		case statusINVALID:
-			if err := s.repo.SaveStatusInvalid(ctx, orderID); err != nil {
-				logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
-				s.badOrdersCh <- orderID
+		for orderID := range orderIDs {
+			accrualData, retryAfter, err := GetAccrualByOrderID(orderID, serverAddress)
+			if errors.Is(err, ErrTooManyRequests) {
+				timeToSleep := 5
+				if retryAfter != 0 {
+					timeToSleep = retryAfter
+				}
+				time.Sleep(time.Second * time.Duration(timeToSleep))
 			}
-		case statusPROCESSING:
-			if err := s.repo.SaveStatusProccessing(ctx, orderID); err != nil {
-				logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
+			if errors.Is(err, ErrOrderNotRegistered) {
+				continue
 			}
-			s.badOrdersCh <- orderID
-		case statusPROCESSED:
-			if err := s.repo.AccruePoints(ctx, orderID, points); err != nil {
-				logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
-				s.badOrdersCh <- orderID
+			if err != nil {
+				logger.Log.Error("accural api handle", zap.String("error", err.Error()))
+			}
+
+			switch accrualData.Status {
+			case statusREGISTERED:
+			case statusINVALID:
+				if err := s.repo.SaveStatus(ctx, orderID, storage.StatusINVALID); err != nil {
+					logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
+				}
+			case statusPROCESSING:
+				if err := s.repo.SaveStatus(ctx, orderID, storage.StatusPROCESSING); err != nil {
+					logger.Log.Error("status handling error", zap.String("status", statusPROCESSING), zap.String("error", err.Error()))
+				}
+			case statusPROCESSED:
+				if err := s.repo.AccruePoints(ctx, orderID, accrualData.Accrual); err != nil {
+					logger.Log.Error("status handling error", zap.String("status", statusPROCESSED), zap.String("error", err.Error()))
+				}
 			}
 		}
 	}
 }
 
-func (s *Service) HandleBadOrdersQueue() {
-	for {
-		badOrderID := <-s.badOrdersCh
-		s.ordersCh <- badOrderID
-	}
+type orderDataType struct {
+	Order   string  `json:"order"`
+	Status  string  `json:"status"`
+	Accrual float64 `json:"accrual"`
 }
 
-func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, error) {
+func GetAccrualByOrderID(orderID int, serverAddress string) (orderDataType, int, error) {
 	start := time.Now()
+	var orderData orderDataType
 	client := &http.Client{}
 	// Как сделать красиво?
 	serverPrefix := ""
@@ -148,14 +149,13 @@ func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, er
 		serverPrefix = "http://"
 	}
 	url := serverPrefix + serverAddress + "/api/orders/" + strconv.Itoa(orderID)
-	logger.Log.Info("accural handle", zap.String("api url", url))
 	request, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		logger.Log.Fatal("accural request init", zap.String("error", err.Error()))
+		return orderData, 0, err
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		logger.Log.Fatal("accural request do", zap.String("error", err.Error()))
+		return orderData, 0, err
 	}
 	defer response.Body.Close()
 	duration := time.Since(start)
@@ -166,26 +166,21 @@ func GetAccrualByOrderID(orderID int, serverAddress string) (float64, string, er
 		"duration", duration,
 	)
 	if response.StatusCode == http.StatusTooManyRequests {
-		return 0.0, "", ErrTooManyRequests
+		retryAfterString := response.Header.Get("Retry-After")
+		retryAfter, err := strconv.Atoi(retryAfterString)
+		if err != nil {
+			return orderData, 0, err
+		}
+		return orderData, retryAfter, ErrTooManyRequests
 	}
 	if response.StatusCode == http.StatusNoContent {
-		return 0.0, "", ErrOrderNotRegistered
+		return orderData, 0, ErrOrderNotRegistered
 	}
-	type orderDataType struct {
-		Order   string  `json:"order"`
-		Status  string  `json:"status"`
-		Accrual float64 `json:"accrual"`
-	}
-	var orderData orderDataType
+
 	if err := json.NewDecoder(response.Body).Decode(&orderData); err != nil {
-		b, errReadAll := io.ReadAll(response.Body)
-		if errReadAll != nil {
-			logger.Log.Fatal("fatal accural handle body read", zap.String("error", err.Error()))
-		}
-		logger.Log.Error("accural handle response", zap.String("response body", string(b)))
-		return 0.0, "", err
+		return orderData, 0, err
 	}
-	return orderData.Accrual, orderData.Status, nil
+	return orderData, 0, nil
 }
 
 func (s *Service) GetUserBalance(ctx context.Context, login string) (*storage.UserBalance, error) {
