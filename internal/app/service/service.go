@@ -97,8 +97,12 @@ func (s *Service) HandleOrderQueue(serverAddress string) {
 		orderIDs, err := s.repo.NewAndProcessingOrders(ctx)
 		if err != nil {
 			logger.Log.Error("select orders for processing in accrual service", zap.String("error", err.Error()))
+			return
 		}
 		for orderID := range orderIDs {
+			if orderID == 0 {
+				continue
+			}
 			accrualData, retryAfter, err := GetAccrualByOrderID(orderID, serverAddress)
 			if errors.Is(err, ErrTooManyRequests) {
 				timeToSleep := 5
@@ -140,7 +144,7 @@ type orderDataType struct {
 }
 
 func GetAccrualByOrderID(orderID int, serverAddress string) (orderDataType, int, error) {
-	start := time.Now()
+	//start := time.Now()
 	var orderData orderDataType
 	client := &http.Client{}
 	// Как сделать красиво?
@@ -158,13 +162,13 @@ func GetAccrualByOrderID(orderID int, serverAddress string) (orderDataType, int,
 		return orderData, 0, err
 	}
 	defer response.Body.Close()
-	duration := time.Since(start)
-	logger.Log.Sugar().Infoln(
-		"uri", request.URL.Path,
-		"method", request.Method,
-		"status", response.StatusCode,
-		"duration", duration,
-	)
+	//duration := time.Since(start)
+	// logger.Log.Sugar().Infoln(
+	// 	"uri", request.URL.Path,
+	// 	"method", request.Method,
+	// 	"status", response.StatusCode,
+	// 	"duration", duration,
+	// )
 	if response.StatusCode == http.StatusTooManyRequests {
 		retryAfterString := response.Header.Get("Retry-After")
 		retryAfter, err := strconv.Atoi(retryAfterString)
