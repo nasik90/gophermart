@@ -250,10 +250,10 @@ func createOrderWithStatusNew(ctx context.Context, tx *sql.Tx, id int, userID in
 	return updateOrderStatus(ctx, tx, id, storage.StatusNEW, uploadedAt)
 }
 
-func updateOrderStatus(ctx context.Context, tx *sql.Tx, OrderID int, statusID int, statusTime time.Time) error {
+func updateOrderStatus(ctx context.Context, tx *sql.Tx, orderID int, statusID int, statusTime time.Time) error {
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO history_statuses (date_time, order_id, status_id) VALUES ($1, $2, $3)`,
-		statusTime, OrderID, statusID); err != nil {
+		statusTime, orderID, statusID); err != nil {
 		return err
 	}
 
@@ -261,8 +261,8 @@ func updateOrderStatus(ctx context.Context, tx *sql.Tx, OrderID int, statusID in
 		`INSERT INTO current_statuses (order_id, status_id, date_time)
 		VALUES ($1, $2, $3)
 	 	ON CONFLICT (order_id)
-		DO UPDATE SET status_id = $2, date_time = $3;`,
-		OrderID, statusID, statusTime); err != nil {
+		DO UPDATE SET status_id = $2, date_time = $3`,
+		orderID, statusID, statusTime); err != nil {
 		return err
 	}
 	return nil

@@ -99,7 +99,7 @@ func (s *Service) HandleOrderQueue(serverAddress string) {
 			logger.Log.Error("select orders for processing in accrual service", zap.String("error", err.Error()))
 			return
 		}
-		for orderID := range orderIDs {
+		for _, orderID := range orderIDs {
 			// if orderID == 0 {
 			// 	continue
 			// }
@@ -153,7 +153,7 @@ func GetAccrualByOrderID(orderID int, serverAddress string) (orderDataType, int,
 		serverPrefix = "http://"
 	}
 	url := serverPrefix + serverAddress + "/api/orders/" + strconv.Itoa(orderID)
-	logger.Log.Info("accural api handle", zap.String("api URL", url))
+	// logger.Log.Info("accural api handle", zap.String("api URL", url))
 	request, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return orderData, 0, err
