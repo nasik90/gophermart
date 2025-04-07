@@ -36,7 +36,8 @@ func main() {
 	}
 	s := service.NewService(repo, options.CheckOrderID)
 	h := handler.NewHandler(s)
-	go s.HandleOrderQueue(options.AccrualServerAddress)
+	stopCh := make(chan bool)
+	go s.HandleOrderQueue(options.AccrualServerAddress, stopCh)
 
 	server := server.NewServer(h, options.ServerAddress)
 	sigs := make(chan os.Signal, 1)
@@ -46,15 +47,19 @@ func main() {
 	go func() {
 		defer wg.Done()
 		<-sigs
+
+		logger.Log.Info("stopping gourutine")
+		stopCh <- true
+
 		logger.Log.Info("closing the server")
 		if err := server.StopServer(); err != nil {
 			logger.Log.Error("stop http server", zap.String("error", err.Error()))
 		}
+
 		logger.Log.Info("closing the storage")
 		if err := repo.Close(); err != nil {
 			logger.Log.Error("close storage", zap.String("error", err.Error()))
 		}
-		logger.Log.Info("ready to exit")
 	}()
 
 	err = server.RunServer()

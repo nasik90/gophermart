@@ -85,56 +85,66 @@ func (s *Service) loadOrderIDInOrderQueue(orderID int) {
 	s.ordersCh <- orderID
 }
 
-func (s *Service) HandleOrderQueue(serverAddress string) {
+func (s *Service) HandleOrderQueue(serverAddress string, stop <-chan bool) {
+
+	ctx := context.Background()
+	for {
+		select {
+		default:
+			orderIDs, err := s.repo.NewAndProcessingOrders(ctx)
+			if err != nil {
+				logger.Log.Error("select orders for processing in accrual service", zap.String("error", err.Error()))
+				return
+			}
+			if err := s.handleOrders(ctx, orderIDs, serverAddress); err != nil {
+				logger.Log.Error("order handle via accrual", zap.String("error", err.Error()))
+			}
+		case <-stop:
+			return
+		}
+	}
+}
+
+func (s *Service) handleOrders(ctx context.Context, orderIDs []int, serverAddress string) error {
 	const (
 		statusREGISTERED = "REGISTERED"
 		statusINVALID    = "INVALID"
 		statusPROCESSING = "PROCESSING"
 		statusPROCESSED  = "PROCESSED"
 	)
-	ctx := context.Background()
-	for {
-		orderIDs, err := s.repo.NewAndProcessingOrders(ctx)
-		if err != nil {
-			logger.Log.Error("select orders for processing in accrual service", zap.String("error", err.Error()))
-			return
+	for _, orderID := range orderIDs {
+		accrualData, retryAfter, err := GetAccrualByOrderID(orderID, serverAddress)
+		if errors.Is(err, ErrTooManyRequests) {
+			timeToSleep := 5
+			if retryAfter != 0 {
+				timeToSleep = retryAfter
+			}
+			time.Sleep(time.Second * time.Duration(timeToSleep))
 		}
-		for _, orderID := range orderIDs {
-			// if orderID == 0 {
-			// 	continue
-			// }
-			accrualData, retryAfter, err := GetAccrualByOrderID(orderID, serverAddress)
-			if errors.Is(err, ErrTooManyRequests) {
-				timeToSleep := 5
-				if retryAfter != 0 {
-					timeToSleep = retryAfter
-				}
-				time.Sleep(time.Second * time.Duration(timeToSleep))
-			}
-			if errors.Is(err, ErrOrderNotRegistered) {
-				continue
-			}
-			if err != nil {
-				logger.Log.Error("accural api handle", zap.String("error", err.Error()))
-			}
+		if errors.Is(err, ErrOrderNotRegistered) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
 
-			switch accrualData.Status {
-			case statusREGISTERED:
-			case statusINVALID:
-				if err := s.repo.SaveStatus(ctx, orderID, storage.StatusINVALID); err != nil {
-					logger.Log.Error("status handling error", zap.String("status", statusINVALID), zap.String("error", err.Error()))
-				}
-			case statusPROCESSING:
-				if err := s.repo.SaveStatus(ctx, orderID, storage.StatusPROCESSING); err != nil {
-					logger.Log.Error("status handling error", zap.String("status", statusPROCESSING), zap.String("error", err.Error()))
-				}
-			case statusPROCESSED:
-				if err := s.repo.AccruePoints(ctx, orderID, accrualData.Accrual); err != nil {
-					logger.Log.Error("status handling error", zap.String("status", statusPROCESSED), zap.String("error", err.Error()))
-				}
+		switch accrualData.Status {
+		case statusREGISTERED:
+		case statusINVALID:
+			if err := s.repo.SaveStatus(ctx, orderID, storage.StatusINVALID); err != nil {
+				return errors.Join(errors.New("status: "+statusINVALID), err)
+			}
+		case statusPROCESSING:
+			if err := s.repo.SaveStatus(ctx, orderID, storage.StatusPROCESSING); err != nil {
+				return errors.Join(errors.New("status: "+statusPROCESSING), err)
+			}
+		case statusPROCESSED:
+			if err := s.repo.AccruePoints(ctx, orderID, accrualData.Accrual); err != nil {
+				return errors.Join(errors.New("status: "+statusPROCESSED), err)
 			}
 		}
 	}
+	return nil
 }
 
 type orderDataType struct {
@@ -153,7 +163,6 @@ func GetAccrualByOrderID(orderID int, serverAddress string) (orderDataType, int,
 		serverPrefix = "http://"
 	}
 	url := serverPrefix + serverAddress + "/api/orders/" + strconv.Itoa(orderID)
-	// logger.Log.Info("accural api handle", zap.String("api URL", url))
 	request, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return orderData, 0, err
