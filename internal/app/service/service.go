@@ -88,6 +88,7 @@ func (s *Service) loadOrderIDInOrderQueue(orderID int) {
 func (s *Service) HandleOrderQueue(serverAddress string, stop <-chan bool) {
 
 	ctx := context.Background()
+	forIter := 0
 	for {
 		select {
 		default:
@@ -98,6 +99,17 @@ func (s *Service) HandleOrderQueue(serverAddress string, stop <-chan bool) {
 			}
 			if err := s.handleOrders(ctx, orderIDs, serverAddress); err != nil {
 				logger.Log.Error("order handle via accrual", zap.String("error", err.Error()))
+			}
+			// Если нет заказов для обработки, то сделаем паузу
+			// Пауза равна от 1 по нарастающей, максимум 3 секунды
+			if len(orderIDs) == 0 {
+				forIter++
+				time.Sleep(time.Duration(forIter) * time.Second)
+				if forIter == 3 {
+					forIter = 0
+				}
+			} else {
+				forIter = 0
 			}
 		case <-stop:
 			return

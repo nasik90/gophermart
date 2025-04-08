@@ -39,8 +39,6 @@ func (s *Server) RunServer() error {
 		r.Post("/user/balance/withdraw", middleware.Auth(s.handler.WithdrawPoints()))
 		// список списаний
 		r.Get("/user/withdrawals", middleware.Auth(s.handler.GetWithdrawals()))
-		// имитация ручки accrual сервиса
-		r.Get("/orders/{id}", s.handler.GetAccrual())
 	})
 	s.Handler = logger.RequestLogger((middleware.GzipMiddleware(r.ServeHTTP)))
 	err := s.ListenAndServe()
