@@ -5,10 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"math/rand"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/nasik90/gophermart/internal/app/logger"
 	middleware "github.com/nasik90/gophermart/internal/app/middlewares"
@@ -201,43 +199,6 @@ func (h *Handler) WithdrawPoints() http.HandlerFunc {
 		}
 		res.Header().Set("content-type", "text/plain")
 		res.WriteHeader(resStatus)
-	}
-}
-
-// имитация ручки accrual сервиса
-func (h *Handler) GetAccrual() http.HandlerFunc {
-	return func(res http.ResponseWriter, req *http.Request) {
-		type resType struct {
-			Order   string  `json:"order"`
-			Status  string  `json:"status"`
-			Accrual float64 `json:"accrual"`
-		}
-		var result resType
-		pathSlice := strings.Split(req.URL.Path, "/")
-		orderID := pathSlice[len(pathSlice)-1]
-		result.Order = orderID
-		statusID := rand.Intn(4)
-		statusName := "PROCESSED"
-		switch statusID {
-		case 1:
-			statusName = "REGISTERED"
-		case 2:
-			statusName = "INVALID"
-		case 3:
-			statusName = "PROCESSING"
-		}
-		result.Status = statusName
-		result.Accrual = float64(rand.Intn(5000))
-		var orderListJSON []byte
-		orderListJSON, err := json.Marshal(result)
-		if err != nil {
-			http.Error(res, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		resStatus := http.StatusOK
-		res.Header().Set("content-type", "application/json")
-		res.WriteHeader(resStatus)
-		res.Write(orderListJSON)
 	}
 }
 
