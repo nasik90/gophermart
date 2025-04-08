@@ -18,8 +18,7 @@ type Store struct {
 
 func NewStore(conn *sql.DB) (*Store, error) {
 	s := &Store{conn: conn}
-	//dir := "../../internal/app/storage/pg/migration"
-	dir := "migration"
+	dir := "internal/migrations/pg"
 	// Применение миграций
 	migrationErr := goose.Up(conn, dir)
 	//Откат миграций
