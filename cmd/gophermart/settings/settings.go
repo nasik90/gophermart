@@ -38,7 +38,7 @@ func ParseFlags(o *Options) {
 	if accrualServerAddress := os.Getenv("ACCRUAL_SYSTEM_ADDRESS"); accrualServerAddress != "" {
 		o.AccrualServerAddress = accrualServerAddress
 	}
-	if checkOrderID := os.Getenv("CHECK_ORDERID_"); checkOrderID != "" {
+	if checkOrderID := os.Getenv("CHECK_ORDERID"); checkOrderID != "" {
 		val, err := strconv.ParseBool(checkOrderID)
 		if err != nil {
 			logger.Log.Fatal("CHECK_ORDERID parsing", zap.String("error", err.Error()))

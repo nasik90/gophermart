@@ -226,22 +226,22 @@ func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, p
 	}
 	defer tx.Rollback()
 
-	rows, err := tx.QueryContext(ctx, `
+	row := tx.QueryRowContext(ctx, `
 		SELECT balance 
 		FROM users_current_points
 		WHERE user_id = $1 FOR UPDATE
 	`, userID)
+	if row.Err() != nil {
+		return row.Err()
+	}
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 	balance := 0.0
-	for rows.Next() {
-		if err := rows.Scan(&balance); err != nil {
-			return err
-		}
+	if err := row.Scan(&balance); err != nil {
+		return err
 	}
-	if err := rows.Err(); err != nil {
+	if err := row.Err(); err != nil {
 		return err
 	}
 
