@@ -234,9 +234,6 @@ func (s *Store) WithdrawPoints(ctx context.Context, login string, OrderID int, p
 	if row.Err() != nil {
 		return row.Err()
 	}
-	if err != nil {
-		return err
-	}
 	balance := 0.0
 	if err := row.Scan(&balance); err != nil {
 		return err
